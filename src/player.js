@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { soundEngine } from './audio.js';
 import { textureGen } from './textures.js';
 
@@ -226,12 +227,44 @@ export class Player {
     add(camGroup, new THREE.CylinderGeometry(0.04, 0.04, 0.06, 16), camMat, 0, 0.01, -0.13, { rx: Math.PI / 2 });
     add(camGroup, new THREE.SphereGeometry(0.008, 8, 8), tallyMat, -0.04, 0.04, -0.12);
 
+    // Head and torso move as whole groups, so their static parts can share draw calls
+    this.mergeChildMeshes(this.charHead);
+    this.mergeChildMeshes(this.charTorsoGroup);
+
     this.characterGroup.traverse(o => { if (o.isMesh && o.castShadow) o.receiveShadow = true; });
     this.yawObject.add(this.characterGroup);
 
     // Animation state
     this.crouchBlend = 0;
     this.moveBlend = 0;
+  }
+
+  // Merges the direct mesh children of a group into one mesh per material and shadow setting.
+  // Only use this on groups whose children are never animated on their own.
+  mergeChildMeshes(group) {
+    group.updateMatrixWorld(true);
+    const buckets = new Map();
+    for (const child of group.children) {
+      if (!child.isMesh) continue;
+      const key = child.material.uuid + (child.castShadow ? ':c' : ':n');
+      if (!buckets.has(key)) buckets.set(key, { material: child.material, cast: child.castShadow, meshes: [] });
+      buckets.get(key).meshes.push(child);
+    }
+
+    buckets.forEach(bucket => {
+      const geos = bucket.meshes.map(m => {
+        m.updateMatrix();
+        return m.geometry.clone().applyMatrix4(m.matrix);
+      });
+      const merged = mergeGeometries(geos, false);
+      if (!merged) return; // incompatible attributes: keep the original meshes
+
+      bucket.meshes.forEach(m => { group.remove(m); m.geometry.dispose(); });
+      const mesh = new THREE.Mesh(merged, bucket.material);
+      mesh.castShadow = bucket.cast;
+      mesh.receiveShadow = true;
+      group.add(mesh);
+    });
   }
 
   buildInvestigatorLeg(x, pantsMat, bootMat, shadowOn) {
