@@ -321,6 +321,29 @@ export class World {
     this.scene.add(lampGlow);
   }
 
+  // Solid wall block with a collider (used to close gaps beside door frames)
+  addSolidBlock(x, y, z, w, h, d, mat) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    geo.translate(x, y, z);
+    applyWorldUV(geo, mat.userData.tile || 2.5);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.scene.add(mesh);
+    this.addCollider(x, y, z, w, h, d);
+  }
+
+  // Closes the wall gap beside a door frame, and blocks the doorway with the door leaf while it is shut.
+  // fills and leaf are [centreX, centreZ, sizeX, sizeZ] in world units.
+  sealDoorway(door, fills, leaf) {
+    fills.forEach(([cx, cz, sx, sz]) => this.addSolidBlock(cx, 1.9, cz, sx, 3.8, sz, this.mats.wall));
+    const center = new THREE.Vector3(leaf[0], 1.3, leaf[1]);
+    const size = new THREE.Vector3(leaf[2], 2.6, leaf[3]);
+    const box = new THREE.Box3().setFromCenterAndSize(center, size);
+    this.colliders.push(box);
+    door.userData.leaf = { box, center, size, shut: true };
+  }
+
   // Ceiling fluorescent panel. Emissive, so it has no per-light shader cost.
   addFixture(x, z, w = 1.3, d = 0.5) {
     const housing = new THREE.Mesh(new THREE.BoxGeometry(w + 0.1, 0.06, d + 0.1), this.mats.plastic);
@@ -391,6 +414,7 @@ export class World {
     this.scene.add(doorWardA);
     this.doors.push(doorWardA);
     this.interactables.push(doorWardA);
+    this.sealDoorway(doorWardA, [[-3, 2.975, 0.4, 0.95], [-3, 4.975, 0.4, 0.05]], [-3, 4.2, 0.3, 1.5]);
 
     const doorOffice = modelFactory.createSecurityDoor('office', 'ARCHIVES & OFFICE', null);
     doorOffice.position.set(3, 0, 4.2);
@@ -398,6 +422,7 @@ export class World {
     this.scene.add(doorOffice);
     this.doors.push(doorOffice);
     this.interactables.push(doorOffice);
+    this.sealDoorway(doorOffice, [[3, 2.975, 0.4, 0.95], [3, 4.975, 0.4, 0.05]], [3, 4.2, 0.3, 1.5]);
 
     const doorWardB = modelFactory.createSecurityDoor('ward_b', 'WARD B - QUARANTINE', 'ward_b_keycard');
     doorWardB.position.set(3, 0, -5.0);
@@ -405,12 +430,14 @@ export class World {
     this.scene.add(doorWardB);
     this.doors.push(doorWardB);
     this.interactables.push(doorWardB);
+    this.sealDoorway(doorWardB, [[3, -6.125, 0.4, 0.75], [3, -3.875, 0.4, 0.75]], [3, -5.0, 0.3, 1.5]);
 
     const doorMorgue = modelFactory.createSecurityDoor('morgue', 'BASEMENT & MORGUE', 'morgue_key');
     doorMorgue.position.set(0, 0, -14);
     this.scene.add(doorMorgue);
     this.doors.push(doorMorgue);
     this.interactables.push(doorMorgue);
+    this.sealDoorway(doorMorgue, [[-0.85, -14, 0.2, 0.4], [0.85, -14, 0.2, 0.4]], [0, -14, 1.5, 0.3]);
 
     // 3. WARD A - ROOM 101 (restraints & examination)
     const gurney1 = modelFactory.createHospitalGurney();
@@ -933,6 +960,15 @@ export class World {
         data.angle = THREE.MathUtils.lerp(data.angle, data.targetAngle, delta * 4.0);
         data.doorPivot.rotation.y = data.angle;
         if (Math.abs(data.angle - prev) > 1e-4) doorsMoving = true;
+      }
+      const leaf = data.leaf;
+      if (leaf) {
+        const shut = data.angle > -0.35;
+        if (shut !== leaf.shut) {
+          leaf.shut = shut;
+          if (shut) leaf.box.setFromCenterAndSize(leaf.center, leaf.size);
+          else leaf.box.makeEmpty();
+        }
       }
     });
     return doorsMoving;

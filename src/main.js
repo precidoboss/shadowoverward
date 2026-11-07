@@ -39,6 +39,8 @@ export class LostFootageGame {
     this.frameCount = 0;
     this.hudTimer = 0;
     this._prompt = null;
+    this.briefingTimers = [];
+    this.lastProximityWarning = -Infinity;
 
     // VHS Overlay Shader
     this.vhsEffect = new VhsShaderEffect(this.container);
@@ -80,6 +82,8 @@ export class LostFootageGame {
     this.state = 'PLAYING';
     soundEngine.init();
     soundEngine.ensureContext();
+    // Compile shaders up front so the first use of a material doesn't stall play
+    this.renderer.compile(this.scene, this.camera);
     this.ui.hideMainMenu();
     this.requestPointerLock();
     this.ui.updateObjective(this.story.getCurrentObjective());
@@ -124,6 +128,8 @@ export class LostFootageGame {
     this.story.generatorPowered = false;
     this.story.safeUnlocked = false;
 
+    this.clearBriefing();
+    this.lastProximityWarning = -Infinity;
     this.gameTime = 0;
     this.startGame();
   }
@@ -147,6 +153,7 @@ export class LostFootageGame {
         this.entity.activate();
         soundEngine.playJumpStinger();
         this.ui.showBannerNotification("WARNING: SOMETHING IS MOVING IN THE HALLS");
+        this.showStealthBriefing();
       }
     }
 
@@ -251,6 +258,26 @@ export class LostFootageGame {
         this.ui.toggleInventory();
       }
     }
+  }
+
+  // Directions for avoiding Subject 407, shown in sequence once it wakes.
+  // Every number matches the thresholds in entity.js.
+  showStealthBriefing() {
+    this.clearBriefing();
+    const lines = [
+      'SUBJECT 407 IS AWAKE. IT HUNTS BY SOUND AND LIGHT.',
+      'WALK [no Shift] OR CROUCH [C]. RUNNING IS HEARD FROM 15m.',
+      'FLASHLIGHT OFF [F] NEAR IT. ITS BEAM IS SEEN FROM 12m.',
+      'STAY OVER 8m AWAY. CLOSER THAN THAT AND IT CHASES YOU.'
+    ];
+    lines.forEach((line, i) => {
+      this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 5000 + i * 4800));
+    });
+  }
+
+  clearBriefing() {
+    this.briefingTimers.forEach(t => clearTimeout(t));
+    this.briefingTimers = [];
   }
 
   unlockWallSafe() {
@@ -396,6 +423,12 @@ export class LostFootageGame {
       }
 
       this.updateInteractionPrompt();
+
+      // Live warning when Subject 407 closes in, at most once every 9 seconds
+      if (this.entity.isActive && this.entity.proximityDanger > 0.5 && this.gameTime - this.lastProximityWarning > 9) {
+        this.lastProximityWarning = this.gameTime;
+        this.ui.showBannerNotification('SUBJECT 407 IS CLOSE!\nCROUCH [C] + FLASHLIGHT OFF [F] + MOVE AWAY');
+      }
 
       // HUD at 20 Hz is plenty for a timer and a compass
       this.hudTimer += rawDelta;

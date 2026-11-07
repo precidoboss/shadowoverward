@@ -596,7 +596,10 @@ export class Player {
 
   updateFlashlightState() {
     const active = this.flashlightOn && this.battery > 0;
-    this.flashlight.visible = active;
+    // Switch by intensity, not visibility: hiding a light changes the light count and makes
+    // three.js recompile every material, which freezes the game for a second or more.
+    this.flashlight.visible = true;
+    this.flashlight.intensity = active ? 5.5 : 0;
     this.playerAura.intensity = active ? 1.8 : 0.65;
   }
 

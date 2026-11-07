@@ -203,6 +203,9 @@ export class UIManager {
   hideMainMenu() {
     this.mainMenu.classList.add('hidden');
     this.hud.classList.remove('hidden');
+    // Starting a run (including a retry) must also clear the end-of-run screens
+    this.gameOverScreen.classList.add('hidden');
+    this.victoryScreen.classList.add('hidden');
   }
 
   showPauseMenu() {
