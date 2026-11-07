@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeChildMeshes } from './mesh-utils.js';
+import { CharacterAnimator } from './character-anim.js';
 import { soundEngine } from './audio.js';
 import { textureGen } from './textures.js';
 
@@ -96,6 +97,7 @@ export class Player {
 
     this.bindEvents();
     this.updateViewPerspective();
+    this.startCharacterAnimator();
   }
 
   // 1. ARTICULATED INVESTIGATOR: press reporter in a long coat.
@@ -305,7 +307,27 @@ export class Player {
   }
 
   // Procedural pose + gait. Driven by bobTimer (stride phase) and movement state.
+  hasAnimatedCharacter() {
+    return !!(this.animator && this.animator.ready);
+  }
+
+  // Loads the Mixamo character. Until it is ready, the procedural investigator stays on screen.
+  startCharacterAnimator() {
+    this.animator = new CharacterAnimator();
+    this.animator.load().then(ok => {
+      if (!ok) return;
+      this.characterGroup.visible = false;
+      this.yawObject.add(this.animator.root);
+      this.updateViewPerspective();
+    });
+  }
+
   animateCharacter(delta, isMoving) {
+    if (this.hasAnimatedCharacter()) {
+      this.animator.play(!isMoving ? 'idle' : this.isSprinting ? 'run' : 'walk');
+      this.animator.update(delta);
+      return;
+    }
     const target = isMoving ? 1 : 0;
     this.moveBlend = THREE.MathUtils.lerp(this.moveBlend, target, delta * 10);
     this.crouchBlend = THREE.MathUtils.lerp(this.crouchBlend, this.isCrouching ? 1 : 0, delta * 8);
@@ -469,13 +491,14 @@ export class Player {
       this.camera.position.set(0, 0, 0);
       this.fpsEquip.visible = true;
       this.charHead.visible = false;
-      this.characterGroup.visible = true;
+      this.characterGroup.visible = !this.hasAnimatedCharacter();
     } else {
       this.camera.position.set(0.65, 0.25, 2.3);
       this.fpsEquip.visible = false;
       this.charHead.visible = true;
-      this.characterGroup.visible = true;
+      this.characterGroup.visible = !this.hasAnimatedCharacter();
     }
+    if (this.hasAnimatedCharacter()) this.animator.root.visible = this.viewMode === 'THIRD_PERSON';
   }
 
   bindEvents() {
