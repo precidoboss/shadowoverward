@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeChildMeshes } from './mesh-utils.js';
 import { textureGen } from './textures.js';
 
 export class ModelFactory {
@@ -828,6 +829,10 @@ export class ModelFactory {
     group.userData.kneeLPivot = kneePivots.L;
     group.userData.kneeRPivot = kneePivots.R;
     group.userData.particles = particles;
+
+    // Spine and head meshes are only ever animated through their parent pivots
+    mergeChildMeshes(group.userData.spine);
+    mergeChildMeshes(group.userData.headPivot);
 
     return group;
   }

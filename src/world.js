@@ -45,6 +45,7 @@ export class World {
     this.mats = this.createMaterials();
 
     this.buildSanatorium();    // walls are queued into buckets and merged into a few draw calls
+    this.buildGrounds();
     this.flushWallBuckets();
     this.buildPropsAndPuzzles();
     this.buildDetail();
@@ -232,7 +233,9 @@ export class World {
     const Y = H / 2;
 
     // Reception lobby
-    this.createWall(0, Y, 24, 16.5, H, 0.4, wallMat);
+    // South wall has a 2.6m doorway onto the grounds (x -1.3..1.3)
+    this.createWall(-4.775, Y, 24, 6.95, H, 0.4, wallMat);
+    this.createWall(4.775, Y, 24, 6.95, H, 0.4, wallMat);
     this.createWall(8, Y, 18, 0.4, H, 12, wallMat);
     this.createWall(-8, Y, 18, 0.4, H, 12, wallMat);
     this.createWall(-5.5, Y, 12, 5, H, 0.4, wallMat);
@@ -268,6 +271,54 @@ export class World {
     this.createWall(12, Y, -24.5, 0.4, H, 21, m.concrete);
     this.createWall(0, Y, -35, 24.5, H, 0.4, m.concrete);
     this.createWall(-4, Y, -25, 0.4, H, 14, m.concrete);
+  }
+
+  // Walled lawn south of the lobby. Reached through the doorway and a stone path.
+  buildGrounds() {
+    const m = this.mats;
+    const lawn = new THREE.MeshStandardMaterial({ color: 0x1d2a1c, roughness: 1.0, metalness: 0 });
+    lawn.userData.tile = 4.0;
+    const bark = new THREE.MeshStandardMaterial({ color: 0x2a2219, roughness: 0.95 });
+
+    // Lawn between the building and the perimeter wall
+    this.addFloor(52, 36, 0, 42, lawn);
+    // Stone path from the doorway out across the lawn
+    this.addFloor(2.6, 10, 0, 29, m.concrete, 0.01);
+
+    // Perimeter wall (solid, merged with the other walls)
+    this.createWall(-26, 1.1, 42, 0.4, 2.2, 36, m.concrete);
+    this.createWall(26, 1.1, 42, 0.4, 2.2, 36, m.concrete);
+    this.createWall(0, 1.1, 60, 52, 2.2, 0.4, m.concrete);
+
+    // Dead trees: trunk with three bare branches. Trunks are solid so they block the player.
+    const trees = [[-14, 34], [15, 40], [-20, 50], [9, 52], [-6, 46], [18, 30]];
+    trees.forEach(([x, z]) => {
+      const tree = new THREE.Group();
+      tree.position.set(x, 0, z);
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 3.2, 7), bark);
+      trunk.position.y = 1.6;
+      trunk.castShadow = true;
+      tree.add(trunk);
+      [[0.5, 2.4, 0.5, 0.7], [-0.45, 2.7, -0.2, -0.6], [0.2, 1.9, -0.5, 0.2]].forEach(([bx, by, bz, ry]) => {
+        const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.05, 1.1, 5), bark);
+        branch.position.set(bx * 0.5, by, bz * 0.5);
+        branch.rotation.set(0.9, ry, 0);
+        branch.castShadow = true;
+        tree.add(branch);
+      });
+      this.scene.add(tree);
+      this.colliders.push(new THREE.Box3().setFromCenterAndSize(
+        new THREE.Vector3(x, 1.6, z), new THREE.Vector3(0.5, 3.2, 0.5)
+      ));
+    });
+
+    // Lamp post beside the path: a glow sprite rather than an extra point light
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 3.0, 8), m.metal);
+    pole.position.set(-2.4, 1.5, 27);
+    this.scene.add(pole);
+    const lampGlow = modelFactory.makeGlow(0xffb070, 0.45);
+    lampGlow.position.set(-2.4, 3.0, 27);
+    this.scene.add(lampGlow);
   }
 
   // Ceiling fluorescent panel. Emissive, so it has no per-light shader cost.
