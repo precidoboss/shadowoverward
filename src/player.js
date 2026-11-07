@@ -208,6 +208,13 @@ export class Player {
     hair.scale.set(0.95, 1.02, 1.04);
     add(this.charHead, new THREE.BoxGeometry(0.2, 0.04, 0.05), hairMat, 0, 0.1, -0.1);
 
+    // Press fedora: felt crown, dark band and brim. Sits on the head, so it hides with the head in first person.
+    const feltMat = new THREE.MeshStandardMaterial({ color: 0x2b2118, roughness: 0.9 });
+    const bandMat = new THREE.MeshStandardMaterial({ color: 0x0f0f0f, roughness: 0.6 });
+    add(this.charHead, new THREE.CylinderGeometry(0.205, 0.205, 0.012, 20), feltMat, 0, 0.165, 0);  // brim
+    add(this.charHead, new THREE.CylinderGeometry(0.13, 0.14, 0.11, 18), feltMat, 0, 0.23, 0);      // crown
+    add(this.charHead, new THREE.CylinderGeometry(0.14, 0.14, 0.025, 18), bandMat, 0, 0.19, 0);     // band
+
     // ---- Arms: shoulder pivot > elbow pivot > hand
     this.charArmL = this.buildInvestigatorArm(-0.3, coatMat, skinMat, shadowOn);
     this.charArmR = this.buildInvestigatorArm(0.3, coatMat, skinMat, shadowOn);

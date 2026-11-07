@@ -745,12 +745,13 @@ export class ModelFactory {
     });
     group.userData.eyeGlows = eyeGlows;
 
-    // Sparse hair strands trailing from the crown
-    for (let i = 0; i < 6; i++) {
-      const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.002, 0.22, 4), hollow);
-      const a = (i / 6) * Math.PI * 2;
-      strand.position.set(Math.cos(a) * 0.09, 0.12, Math.sin(a) * 0.06 - 0.05);
-      strand.rotation.x = -0.6;
+    // Long, sparse hair hanging from the crown and falling past the shoulders
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const len = 0.36 + (i % 3) * 0.08;
+      const strand = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.002, len, 4), hollow);
+      strand.position.set(Math.cos(a) * 0.12, 0.1 - len / 2, Math.sin(a) * 0.08 - 0.03);
+      strand.rotation.set(Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12);
       headPivot.add(strand);
     }
 
