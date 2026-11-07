@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SHADOW OVER WARD B: The St. Jude Incident</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <!-- 3D WebGL Canvas is injected here -->
+
+    <!-- Camcorder Found-Footage HUD Overlay -->
+    <div id="camcorder-hud" class="hidden">
+      <!-- Framing Corners -->
+      <div class="camcorder-corners">
+        <div class="corner corner-tl"></div>
+        <div class="corner corner-tr"></div>
+        <div class="corner corner-bl"></div>
+        <div class="corner corner-br"></div>
+      </div>
+
+      <!-- Top Status Row -->
+      <div class="hud-top-bar">
+        <div class="rec-indicator">
+          <div class="rec-dot"></div>
+          <span>REC</span>
+          <span style="font-size: 18px; margin-left: 6px; color: #aaa;">SP [120 MIN]</span>
+        </div>
+        <div class="hud-objective-bar">
+          <div class="objective-label">PRIMARY OBJECTIVE</div>
+          <div id="objective-text">Search the Reception Lobby for the Ward A Key</div>
+          <div id="waypoint-beacon" class="hud-waypoint-beacon">◆ TARGET: RECEPTION DESK [12m away]</div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px;">
+          <button id="hud-audio-status" class="hud-audio-pill" style="pointer-events: auto;">🔊 AUDIO ON</button>
+          <div class="cam-battery-container">
+            <span style="font-size: 18px;">CAM PWR</span>
+            <div class="cam-battery-outline">
+              <div id="cam-battery-fill" class="cam-battery-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reticle and Prompts -->
+      <div id="crosshair"></div>
+      <div id="interaction-prompt" class="hidden">[E] TAKE TAPE</div>
+      <div id="notification-banner"></div>
+
+      <!-- Bottom Status Row -->
+      <div class="hud-bottom-bar">
+        <div class="cam-meta">
+          <div>OCT 31 1997</div>
+          <div id="cam-timecode" style="color: #66ff88;">00:00:00:00</div>
+          <div id="night-vision-status" style="font-size: 16px; margin-top: 4px; color: #888;">IR NIGHT-VISION [N]</div>
+          <div id="zoom-status" style="font-size: 16px; color: #888;">ZOOM: 1.0X [R-CLICK]</div>
+        </div>
+
+        <div class="hud-controls-hint">
+          [W,A,S,D] Move | [V] 1st/3rd Person | [M] Map | [N] Night Vision | [R-CLICK] Zoom | [F] Light | [E] Interact | [TAB] Bag
+        </div>
+
+        <div class="status-bars-container">
+          <div class="flashlight-status-container">
+            <span>FLASHLIGHT</span>
+            <div class="flashlight-bar-bg">
+              <div id="flashlight-bar"></div>
+            </div>
+          </div>
+          <div class="stamina-status-container" style="display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 18px;">
+            <span>STAMINA</span>
+            <div class="flashlight-bar-bg">
+              <div id="stamina-bar" style="width: 100%; height: 100%; background: #22ccff; transition: width 0.15s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN MENU -->
+    <div id="main-menu">
+      <div class="title-container">
+        <h1 class="game-main-title">SHADOW OVER WARD B</h1>
+        <div class="game-sub-title">THE ST. JUDE INCIDENT</div>
+      </div>
+      <div class="menu-buttons">
+        <button id="btn-start-game" class="retro-btn">START INVESTIGATION</button>
+        <button id="btn-controls" class="retro-btn">HOW TO PLAY</button>
+        <button id="btn-settings" class="retro-btn">SETTINGS</button>
+      </div>
+    </div>
+
+    <!-- CONTROLS & INSTRUCTIONS MODAL -->
+    <div id="controls-modal" class="modal-overlay hidden">
+      <div class="retro-panel">
+        <h2 class="retro-title">INVESTIGATOR BRIEFING</h2>
+        <p style="margin-bottom: 16px; line-height: 1.5;">
+          You have broken into the abandoned <strong>St. Jude's Psychiatric Facility</strong> to recover <strong>4 missing VHS tapes</strong> that prove what truly happened during the 1974 containment breach.
+        </p>
+        <div style="background: rgba(0,0,0,0.4); padding: 16px; border-radius: 4px; margin-bottom: 20px; line-height: 1.8;">
+          <div><strong>W, A, S, D</strong> : Move Investigator</div>
+          <div><strong>MOUSE</strong> : Look & Aim Camcorder</div>
+          <div><strong>V</strong> : Toggle 1st Person / 3rd Person View (See your character!)</div>
+          <div><strong>F</strong> : Toggle Flashlight (Conserves Battery!)</div>
+          <div><strong>E</strong> : Pick up Tapes, Keys, Batteries & Interact with Doors/Keypads</div>
+          <div><strong>SHIFT</strong> : Sprint (Creates heavy noise!)</div>
+          <div><strong>TAB / I</strong> : Open Inventory & VCR Tape Viewer</div>
+          <div><strong>ESC</strong> : Pause Menu</div>
+        </div>
+        <p style="color: #ff5555; margin-bottom: 20px;">
+          ⚠ <strong>SURVIVAL WARNING:</strong> Subject 407 still roams the darkened wards. It hears running footsteps and sees your flashlight beam. If your camera glitches frantically and your heart races... turn off your light and HIDE.
+        </p>
+        <button id="btn-close-controls" class="retro-btn">UNDERSTOOD</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="retro-panel">
+        <h2 class="retro-title">SETTINGS</h2>
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 8px;">Mouse Sensitivity</label>
+          <input type="range" id="slider-sensitivity" min="1.0" max="4.0" step="0.1" value="2.2" style="width: 100%;" />
+        </div>
+        <div style="margin-bottom: 25px;">
+          <label style="display: block; margin-bottom: 8px;">Master Audio Volume</label>
+          <input type="range" id="slider-volume" min="0.0" max="1.0" step="0.05" value="0.75" style="width: 100%;" />
+        </div>
+        <button id="btn-close-settings" class="retro-btn">SAVE & RETURN</button>
+      </div>
+    </div>
+
+    <!-- PAUSE MENU -->
+    <div id="pause-menu" class="modal-overlay hidden">
+      <div class="retro-panel" style="max-width: 400px; text-align: center;">
+        <h2 class="retro-title">PAUSED</h2>
+        <button id="btn-resume" class="retro-btn">RESUME FOOTAGE</button>
+        <button id="btn-pause-settings" class="retro-btn" onclick="document.getElementById('settings-modal').classList.remove('hidden')">SETTINGS</button>
+      </div>
+    </div>
+
+    <!-- SAFE KEYPAD MODAL -->
+    <div id="safe-keypad-modal" class="modal-overlay hidden">
+      <div class="retro-panel" style="max-width: 420px;">
+        <h2 class="retro-title">WALL VAULT KEYPAD</h2>
+        <div class="keypad-container">
+          <div id="keypad-display">____</div>
+          <div class="keypad-grid">
+            <button class="keypad-btn" data-val="1">1</button>
+            <button class="keypad-btn" data-val="2">2</button>
+            <button class="keypad-btn" data-val="3">3</button>
+            <button class="keypad-btn" data-val="4">4</button>
+            <button class="keypad-btn" data-val="5">5</button>
+            <button class="keypad-btn" data-val="6">6</button>
+            <button class="keypad-btn" data-val="7">7</button>
+            <button class="keypad-btn" data-val="8">8</button>
+            <button class="keypad-btn" data-val="9">9</button>
+            <button class="keypad-btn action-btn" data-val="C">CLR</button>
+            <button class="keypad-btn" data-val="0">0</button>
+            <button class="keypad-btn submit-btn" data-val="E">ENT</button>
+          </div>
+        </div>
+        <button id="btn-close-keypad" class="retro-btn" style="margin-top: 24px;">CANCEL / EXIT</button>
+      </div>
+    </div>
+
+    <!-- DOCUMENT / CASE FILE MODAL -->
+    <div id="document-modal" class="modal-overlay hidden">
+      <div class="parchment">
+        <div class="confidential-stamp">CONFIDENTIAL</div>
+        <div class="doc-header">
+          <div id="doc-title" style="font-size: 20px; font-weight: bold;">DIRECTOR MEMO</div>
+          <div style="font-size: 13px; color: #555;">ST. JUDE'S SANATORIUM ARCHIVE</div>
+        </div>
+        <div id="doc-content">Memo text here...</div>
+        <div id="doc-clue"></div>
+        <button id="btn-close-doc" class="retro-btn" style="margin-top: 25px; background: #3c3224; border-color: #554433;">PUT DOWN FILE [ESC]</button>
+      </div>
+    </div>
+
+    <!-- INVENTORY MODAL -->
+    <div id="inventory-modal" class="modal-overlay hidden">
+      <div class="retro-panel" style="max-width: 650px;">
+        <h2 class="retro-title">INVESTIGATOR SATCHEL</h2>
+        <div class="inv-section-title">RECOVERED VHS TAPES</div>
+        <div id="inv-tapes-list"></div>
+
+        <div class="inv-section-title">KEYS & ACCESS CARDS</div>
+        <div id="inv-keys-list" style="margin-bottom: 12px;"></div>
+
+        <div class="inv-section-title">EQUIPMENT STATUS</div>
+        <div style="font-size: 16px; line-height: 1.8;">
+          <div>Generator High-Voltage Fuse: <span id="inv-fuse-status" style="color: #ffdd44;">Not Found</span></div>
+        </div>
+
+        <button id="btn-close-inv" class="retro-btn" style="margin-top: 24px;">CLOSE SATCHEL [TAB / ESC]</button>
+      </div>
+    </div>
+
+    <!-- CRT TV & VCR PLAYBACK MODAL -->
+    <div id="vcr-playback-modal" class="modal-overlay hidden">
+      <div class="vcr-tv-cabinet">
+        <div class="crt-bezel">
+          <div class="vcr-osd-top">
+            <div>▶ PLAY [HI-FI]</div>
+            <div id="vcr-tape-date">OCT 12 1997</div>
+          </div>
+          <div class="vcr-video-viewport">
+            <div class="found-footage-icon">📼</div>
+            <div id="vcr-tape-title" style="font-family: 'VT323', monospace; font-size: 32px; color: #fff; margin-top: 10px;">TAPE 01: FIRST CONTACT</div>
+            <div id="vcr-subtitles">PLAYING AUDIO LOG...</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-family: 'VT323'; color: #33ff55; font-size: 20px;">ST. JUDE CLOSED CIRCUIT RECORDING</div>
+            <button id="btn-eject-tape" class="retro-btn" style="width: 180px; margin: 0; padding: 6px 14px; font-size: 20px;">⏏ EJECT TAPE</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FACILITY BLUEPRINT MAP MODAL (M KEY) -->
+    <div id="map-modal" class="modal-overlay hidden">
+      <div class="retro-panel" style="max-width: 780px; width: 95%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #33ff55; padding-bottom: 8px; margin-bottom: 15px;">
+          <h2 class="retro-title" style="margin: 0; font-size: 34px;">ST. JUDE SANATORIUM - FACILITY BLUEPRINT</h2>
+          <span style="color: #ff4444; font-family: 'VT323'; font-size: 22px;">CONFIDENTIAL ARCHIVE</span>
+        </div>
+        
+        <!-- Interactive 2D Blueprint Graphic -->
+        <div class="facility-map-container" id="facility-map">
+          <!-- Room Zones -->
+          <div class="map-zone zone-basement">
+            <div class="zone-title">SUB-LEVEL: MORGUE & GENERATOR</div>
+            <div class="zone-details">Generator Breaker Room | Autopsy Lab | Emergency Fire Exit</div>
+          </div>
+
+          <div class="map-middle-row">
+            <div class="map-zone zone-ward-a">
+              <div class="zone-title">WARD A - MEDICAL</div>
+              <div class="zone-details">Room 101 (Tape 01)<br/>Room 102 (Ward B Keycard & Clue)</div>
+            </div>
+
+            <div class="map-zone zone-hallway">
+              <div class="zone-title">CENTRAL CORRIDOR</div>
+              <div class="zone-details">Security Doors<br/>Blood Trail</div>
+            </div>
+
+            <div class="map-zone zone-office-ward-b">
+              <div class="zone-sub-box">
+                <div class="zone-title">ARCHIVES & OFFICE</div>
+                <div class="zone-details">Dr. Holloway's Desk<br/>Wall Safe (1974) & VCR Station</div>
+              </div>
+              <div class="zone-sub-box" style="border-top: 1px dashed #44aa66; margin-top: 6px; padding-top: 6px;">
+                <div class="zone-title" style="color: #ff5555;">WARD B - QUARANTINE</div>
+                <div class="zone-details">Tape 02 | High-Voltage Fuse</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="map-zone zone-lobby">
+            <div class="zone-title">RECEPTION LOBBY & WAITING ROOM</div>
+            <div class="zone-details">Reception Counter (Ward A Key) | Blocked Front Entrance</div>
+          </div>
+
+          <!-- Dynamic Player Location Pin -->
+          <div id="map-player-pin" class="player-map-pin">
+            <div class="pin-marker">▲</div>
+            <div class="pin-label">YOU</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 18px;">
+          <div style="font-size: 15px; color: #88ffaa;">
+            💡 Objective coordinates are marked live. Follow the top HUD waypoint beacon!
+          </div>
+          <button id="btn-close-map" class="retro-btn" style="width: 200px; margin: 0; padding: 8px 16px; font-size: 20px;">CLOSE MAP [M / ESC]</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="game-over-screen" class="modal-overlay hidden">
+      <div class="retro-panel" style="text-align: center; max-width: 550px;">
+        <div class="game-over-title">SIGNAL LOST</div>
+        <p style="font-size: 20px; color: #ff8888; margin-bottom: 10px;">TAPE CORRUPTED BY ENTITY</p>
+        <p style="font-size: 16px; color: #aaa; margin-bottom: 25px; line-height: 1.5;">
+          Subject 407 dragged you into the dark. Your camcorder was left running on the floorboards...
+        </p>
+        <button id="btn-retry" class="retro-btn">REWIND TAPE (RETRY)</button>
+      </div>
+    </div>
+
+    <!-- VICTORY / ESCAPE SCREEN -->
+    <div id="victory-screen" class="modal-overlay hidden">
+      <div class="retro-panel" style="text-align: center; max-width: 620px;">
+        <div class="victory-title">EVIDENCE SECURED</div>
+        <p style="font-size: 22px; color: #88ffaa; margin-bottom: 12px;">YOU ESCAPED ST. JUDE'S ALIVE</p>
+        <p style="font-size: 16px; color: #ddd; margin-bottom: 20px; line-height: 1.6;">
+          You slammed the heavy fire exit gate shut behind you as Subject 407 shrieked in the dark. The lost footage of St. Jude's Sanatorium will now be broadcast to the world.
+        </p>
+        <div style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 4px; margin-bottom: 25px;">
+          <div>Time Survived: <strong id="victory-time" style="color: #33ff55;">0m 0s</strong></div>
+          <div>VHS Tapes Recovered: <strong id="victory-tapes" style="color: #33ff55;">4 / 4</strong></div>
+          <div>Investigation Rating: <strong style="color: #ffcc00;">MASTER JOURNALIST</strong></div>
+        </div>
+        <button id="btn-victory-restart" class="retro-btn">MAIN MENU</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
