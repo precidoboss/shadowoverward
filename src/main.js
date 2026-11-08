@@ -750,7 +750,7 @@ export class LostFootageGame {
       }
       this.player.update(delta, this.gameTime);
       // CCTV: when the player is near the console, draw the selected camera into its screen
-      if (this.levelKind === 'quick' && this.world.cctvNear && this.world.cctvNear(this.player.yawObject.position)) {
+      if (this.world.cctvNear && this.world.cctvNear(this.player.yawObject.position)) {
         this.world.renderCctv(this.renderer, [this.weapons.gunFP, this.weapons.gunTP, this.player.characterGroup]);
       }
       // Quick run safety net: outside the walls means stuck, so bring the player back to the entrance

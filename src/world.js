@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { textureGen } from './textures.js';
 import { modelFactory } from './models.js';
+import { loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreAt, makeHolder } from './props.js';
 
 // Texture coordinates measured in metres so every surface keeps the same texel scale.
 // Works on boxes and planes alike by projecting along the dominant normal axis.
@@ -46,6 +47,8 @@ export class World {
     this.mats = this.createMaterials();
 
     this.buildSanatorium();    // walls are queued into buckets and merged into a few draw calls
+    // Investigation map only: Quick Run builds its own props and CCTV in QuickWorld
+    if (this.constructor === World) this.buildFullDressing();
     this.buildGrounds();
     this.flushWallBuckets();
     this.buildPropsAndPuzzles();
@@ -155,6 +158,158 @@ export class World {
     this.colliders.push(new THREE.Box3().setFromCenterAndSize(
       new THREE.Vector3(x, y, z), new THREE.Vector3(w, h, d)
     ));
+  }
+
+  // ---------- Props, paintings and CCTV for the investigation map ----------
+  // Same CCTV system as Quick Run: seven cameras watch every area, and the console in the reception lobby cycles them.
+  buildFullDressing() {
+    loadGLB('models/props.glb').then(gltf => {
+      const place = (name, height, x, z, yaw, { y = 0, solid = false } = {}) => {
+        const src = gltf.scene.getObjectByName(name);
+        if (!src) { console.warn('Prop not found in props.glb:', name); return; }
+        const part = makeHolder();
+        const model = tidy(src.clone(true));
+        part.add(model);
+        sizeHeight(model, height);
+        part.rotation.y = yaw;
+        this.scene.add(part);
+        standOn(part, x, y, z, model);
+        if (solid) this.colliders.push(new THREE.Box3().setFromObject(part));
+      };
+      // Lockers against the lobby walls
+      place('Locker(closed)', 2.0, -7.5, 17.5, Math.PI / 2, { solid: true });
+      place('Locker(closed)', 2.0, 7.5, 16.0, -Math.PI / 2, { solid: true });
+      // Barrels and pipes in the basement
+      place('Barrel', 0.9, -9.5, -30.0, 0, { solid: true });
+      place('Barrel', 0.9, -8.0, -30.8, 0.6, { solid: true });
+      place('Barrel', 0.9, 9.0, -21.0, 0, { solid: true });
+      place('Pipe', 3.7, -10.9, -33.5, 0, { solid: true });
+      place('Pipe', 3.7, 10.9, -33.5, 0, { solid: true });
+      // Electrical box beside the basement generator, and an effigy in the morgue
+      place('PowerBox', 0.67, -11.6, -22.5, Math.PI / 2, { y: 1.1 });
+      place('Effigy', 1.6, 5.5, -31.5, Math.PI, { y: 0.5 });
+    }).catch(err => console.warn('Prop pack failed to load', err));
+
+    loadGLB('models/paintings.glb').then(gltf => {
+      // Each painting is one panel of the file, hung on a wall at eye height
+      const hang = (name, x, y, z, yaw) => {
+        const src = gltf.scene.getObjectByName(name);
+        if (!src) { console.warn('Painting not found:', name); return; }
+        const part = makeHolder();
+        const model = tidy(src.clone(true), { doubleSide: true });
+        part.add(model);
+        sizeHeight(model, 1.25);
+        part.rotation.y = yaw;
+        this.scene.add(part);
+        centreAt(part, x, y, z, model);
+      };
+      hang('Plane.003_0', -16.7, 1.8, 8.5, Math.PI / 2);   // Ward A, west wall
+      hang('Plane.001_1', -2.7, 1.7, 8.5, Math.PI / 2);    // central corridor, west wall
+      hang('Plane.005_4', 2.7, 1.7, 8.5, -Math.PI / 2);    // central corridor, east wall
+      hang('Plane.007_6', 16.7, 1.8, 3.5, -Math.PI / 2);   // Dr. Holloway's office, east wall
+    }).catch(err => console.warn('Paintings failed to load', err));
+
+    // Cameras: one in every area, mounted under the ceiling (3.8 m) and aimed at the room
+    this.cctvCams = [
+      { name: 'CAM 01 · RECEPTION', pos: new THREE.Vector3(-7.3, 3.45, 23.3), target: new THREE.Vector3(0, 0.9, 15.5) },
+      { name: 'CAM 02 · CENTRAL HALL', pos: new THREE.Vector3(2.6, 3.45, 9.0), target: new THREE.Vector3(-2.0, 0.9, 0.0) },
+      { name: 'CAM 03 · WARD A', pos: new THREE.Vector3(-16.3, 3.45, 11.8), target: new THREE.Vector3(-9.5, 0.9, 6.0) },
+      { name: 'CAM 04 · WARD A ROOM 102', pos: new THREE.Vector3(-16.3, 3.45, -11.8), target: new THREE.Vector3(-9.5, 0.9, -5.5) },
+      { name: 'CAM 05 · OFFICE', pos: new THREE.Vector3(16.3, 3.45, 12.3), target: new THREE.Vector3(10.0, 0.9, 6.0) },
+      { name: 'CAM 06 · WARD B', pos: new THREE.Vector3(16.3, 3.45, -12.3), target: new THREE.Vector3(10.0, 0.9, -6.0) },
+      { name: 'CAM 07 · BASEMENT', pos: new THREE.Vector3(-11.3, 3.45, -33.5), target: new THREE.Vector3(0, 0.9, -24) }
+    ];
+    this.cctvSel = 0;
+    this.cctvFrame = 0;
+    this.cctvRT = this.cctvCams.map(() => new THREE.WebGLRenderTarget(384, 288));
+    this.cctvFeed = this.cctvCams.map(c => {
+      const cam = new THREE.PerspectiveCamera(65, 4 / 3, 0.1, 30);
+      const dir = c.target.clone().sub(c.pos).normalize();
+      cam.position.copy(c.pos).addScaledVector(dir, 0.25);
+      cam.lookAt(c.target);
+      return cam;
+    });
+
+    // Console in the reception lobby, with the monitor standing on top of it
+    const holder = makeHolder();
+    holder.userData = { isInteractable: true, type: 'cctv_console', name: 'CCTV Console' };
+    this.scene.add(holder);
+    this.interactables.push(holder);
+    this.cctvHolder = holder;
+    this.cctvConsolePos = { x: 6.4, z: 20.8 };
+
+    loadGLB('models/cctv_console.glb').then(gltf => {
+      const model = tidy(gltf.scene.clone(true));
+      holder.add(model);
+      sizeLongest(model, 1.4);
+      const b = new THREE.Box3().setFromObject(model);
+      const c = b.getCenter(new THREE.Vector3());
+      model.position.x += this.cctvConsolePos.x - c.x;
+      model.position.z += this.cctvConsolePos.z - c.z;
+      model.position.y += -b.min.y;
+      const placed = new THREE.Box3().setFromObject(model);
+      this.colliders.push(placed);
+
+      const mon = new THREE.Group();
+      const cx = (placed.min.x + placed.max.x) / 2;
+      const front = placed.max.z;
+      mon.position.set(cx, placed.max.y + 0.5, front - 0.05);
+      const bezel = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.72, 0.06), new THREE.MeshStandardMaterial({ color: 0x0b0f0d, roughness: 0.6 }));
+      mon.add(bezel);
+      this.cctvScreenMat = new THREE.MeshBasicMaterial({ map: this.cctvRT[0].texture, toneMapped: false });
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.6), this.cctvScreenMat);
+      screen.position.z = 0.035;
+      mon.add(screen);
+      const light = new THREE.PointLight(0x9dffcc, 1.6, 4.5);
+      light.position.set(cx, placed.max.y + 0.6, front + 0.6);
+      holder.add(mon, light);
+      this.cctvMonitor = mon;
+      this.addFlicker(light);
+    }).catch(err => console.warn('CCTV console failed to load', err));
+
+    for (const c of this.cctvCams) {
+      const mount = makeHolder();
+      this.scene.add(mount);
+      loadGLB('models/cctv_camera.glb').then(gltf => {
+        const model = tidy(gltf.scene.clone(true));
+        mount.add(model);
+        sizeLongest(model, 0.4);
+        mount.position.copy(c.pos);
+        mount.lookAt(c.target);
+      }).catch(err => console.warn('CCTV camera failed to load', err));
+    }
+  }
+
+  // Watching the console is only worth the cost when the player is near it
+  cctvNear(pos) {
+    return this.cctvHolder && this.cctvConsolePos && Math.hypot(pos.x - this.cctvConsolePos.x, pos.z - this.cctvConsolePos.z) < 9;
+  }
+
+  // Renders the selected camera into its feed, every other frame, with the monitor and the player hidden
+  renderCctv(renderer, hide) {
+    if (!this.cctvScreenMat || !this.cctvMonitor) return;
+    this.cctvFrame++;
+    if (this.cctvFrame % 2) return;
+    const i = this.cctvSel;
+    const was = hide.map(o => (o ? o.visible : false));
+    hide.forEach(o => { if (o) o.visible = false; });
+    this.cctvMonitor.visible = false;
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.cctvRT[i]);
+    renderer.render(this.scene, this.cctvFeed[i]);
+    renderer.setRenderTarget(prev);
+    this.cctvMonitor.visible = true;
+    hide.forEach((o, k) => { if (o) o.visible = was[k]; });
+  }
+
+  // Switches the console to the next camera. Returns the feed's name.
+  cycleCctv() {
+    this.cctvSel = (this.cctvSel + 1) % this.cctvCams.length;
+    if (this.cctvScreenMat) {
+      this.cctvScreenMat.map = this.cctvRT[this.cctvSel].texture;
+      this.cctvScreenMat.needsUpdate = true;
+    }
+    return this.cctvCams[this.cctvSel].name;
   }
 
   addFlicker(light) {
