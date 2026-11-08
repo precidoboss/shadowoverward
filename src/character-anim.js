@@ -1,14 +1,18 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 
 const loader = new FBXLoader();
+// Each mesh is parsed once; every character gets its own skinned copy
+const fbxCache = new Map();
 
 // Loads a Mixamo-rigged character. The mesh is an FBX; each clip is a small in-place JSON file
 // (converted once from Mixamo FBX). Throws if a clip does not drive bones that exist in the mesh,
 // so callers can keep a fallback model.
 // Returns speeds[name] = metres per second the clip travels, used to match foot speed to movement.
 export async function loadRiggedCharacter({ mesh, clips, height, rotationY = 0, slimX = 1 }) {
-  const model = await loader.loadAsync(mesh);
+  if (!fbxCache.has(mesh)) fbxCache.set(mesh, loader.loadAsync(mesh));
+  const model = cloneSkeleton(await fbxCache.get(mesh));
 
   // Fit to the requested height, face the game's forward direction, stand on the floor
   model.scale.setScalar(1);

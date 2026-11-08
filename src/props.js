@@ -114,3 +114,19 @@ export function centreInside(group, model) {
   model.position.sub(group.worldToLocal(c.clone()));
   model.updateWorldMatrix(true, false);
 }
+
+// Metal with no reflection map renders almost black, so the shiny metal parts become matte.
+export function matte(root, metalCap = 0.2) {
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m || m.metalness === undefined || m.metalness <= metalCap) continue;
+      m.metalness = metalCap;
+      m.metalnessMap = null;
+      m.roughness = Math.max(m.roughness ?? 0.5, 0.6);
+      m.needsUpdate = true;
+    }
+  });
+  return root;
+}

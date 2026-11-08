@@ -30,7 +30,18 @@ const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0
 // The muzzle flame is the uploaded fire animation. It is scaled once to about half a metre across,
 // then every shot plays it from the muzzle. Its planes face forward along the barrel.
 function buildMuzzleFlame(gltf) {
-  const inner = tidy(gltf.scene.clone(true));
+  // Flame planes keep their own transparency; additive blending makes the black around the fire vanish
+  const inner = gltf.scene.clone(true);
+  inner.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      m.transparent = true;
+      m.blending = THREE.AdditiveBlending;
+      m.depthWrite = false;
+      m.needsUpdate = true;
+    }
+  });
   const clip = gltf.animations[0];
   const mixer = new THREE.AnimationMixer(inner);
   const action = mixer.clipAction(clip);
@@ -88,8 +99,8 @@ function buildAmmoBox() {
     model.traverse(o => { if (o.isMesh) o.castShadow = true; });
     g.add(model);
     sizeHeight(model, 0.46);
-    g.rotation.y = Math.random() * Math.PI * 2;
-    standOn(g, g.position.x, 0, g.position.z, model);
+    g.rotation.y = g.position.y > 0 ? 0 : Math.random() * Math.PI * 2;   // on a surface: square to it
+    standOn(g, g.position.x, g.position.y, g.position.z, model);
   }).catch(err => console.warn('Ammo box failed to load', err));
   return g;
 }
@@ -108,7 +119,7 @@ export function createPickup(game, type, spot) {
     group.rotation.set(0, spot.y !== undefined ? 0 : 0.6, 0);
     group.position.set(spot.x, spot.y ?? 0, spot.z);
   } else {
-    group.position.set(spot.x, 0, spot.z);
+    group.position.set(spot.x, spot.y ?? 0, spot.z);
   }
   const names = { rifle: 'Service Rifle', ammo: 'Rifle Ammo', fuse: 'High-Voltage Fuse' };
   group.userData = { isInteractable: true, type, name: names[type] };

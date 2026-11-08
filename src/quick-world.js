@@ -4,8 +4,9 @@ import { modelFactory } from './models.js';
 import { CORRIDOR_BOXES } from './corridor-data.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import {
-  loadGLB, tidy, sizeHeight, standOn, centreAt, makeHolder, buildHighVoltageFuse
+  loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreAt, makeHolder, buildHighVoltageFuse, matte
 } from './props.js';
+import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
 
 // The quick run plays inside the horror corridor model. Two areas matter:
 //  - the north end (the entrance), where the run starts, with the autopsy table and the skelevision
@@ -27,6 +28,11 @@ export const GENERATOR = { x: -5.85, z: 7.5 };
 export const EXIT = { x: -3.9, z: 8.3 };              // airlock, on the back wall of the generator room
 // The service rifle lies on the autopsy table, beside the skelevision
 export const RIFLE_SPOT = { x: TABLE.x + 0.36, y: 0.99, z: TABLE.z };
+
+// The west hall corner: the office table with the old TV on its north end and the ammo box on its south end.
+// The TV faces east into the hall. The table is checked against the walls, so the route stays open.
+export const CORNER = { x: -9.0, z: -1.2, tvZ: -1.55, ammoZ: -0.85 };
+export const CORNER_TOP_Y = 0.63;
 
 // The portal swirls once the airlock is open. Both shaders are plain GLSL.
 const PORTAL_VERT = `
@@ -54,7 +60,7 @@ const PORTAL_FRAG = `
 const MODELS = [
   'models/corridor.glb', 'models/bed.glb', 'models/autopsy_table.glb', 'models/skelevision.glb',
   'models/props.glb', 'models/paintings.glb', 'models/generator.glb', 'models/airlock_door.glb',
-  'models/ammo_box.glb'
+  'models/ammo_box.glb', 'models/office_table.glb', 'models/old_tv.glb'
 ];
 
 // Start fetching as soon as this file loads, so the models are usually ready before Play is pressed
@@ -117,6 +123,7 @@ export class QuickWorld extends World {
     this.buildGeneratorAndExit();
     this.buildDressing();       // props and paintings
     this.buildTapes();          // the found footage
+    this.buildCornerSet();      // the TV that plays Shadow 47 footage, on the office table
   }
 
   // ---------- Entrance: the autopsy table and the skelevision on it ----------
@@ -245,7 +252,7 @@ export class QuickWorld extends World {
 
     loadGLB('models/safe.glb').then(gltf => {
       // The safe is rigged, so it is cloned with its skeleton; a plain clone would lose the bones
-      const model = tidy(cloneSkeleton(gltf.scene));
+      const model = matte(tidy(cloneSkeleton(gltf.scene)));
       sizeHeight(model, 0.85);
       safe.rotation.y = Math.PI / 2;    // the door faces east, into the bedroom
       safe.add(model);
@@ -372,6 +379,178 @@ export class QuickWorld extends World {
     if (this.portal) this.portal.material.uniforms.uAlpha.value = 1;
   }
 
+  // ---------- West hall: the office table, the old TV, and the Shadow 47 footage ----------
+  buildCornerSet() {
+    // The stage the TV plays: a dark corridor, with the real character (the same rig as in the game)
+    this.replayScene = new THREE.Scene();
+    this.replayScene.background = new THREE.Color(0x030504);
+    this.replayScene.add(new THREE.AmbientLight(0x6b7f72, 1.0));
+    const lamp = new THREE.PointLight(0xffe2b0, 3, 12);
+    lamp.position.set(0, 2.8, -3.5);
+    this.replayScene.add(lamp);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 16), new THREE.MeshStandardMaterial({ color: 0x1a1d1b, roughness: 0.9 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, 0, -5);
+    this.replayScene.add(floor);
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x2b2f2c, roughness: 0.95 });
+    const left = new THREE.Mesh(new THREE.PlaneGeometry(16, 3.2), wallMat);
+    left.rotation.y = Math.PI / 2;
+    left.position.set(-3, 1.6, -5);
+    const right = new THREE.Mesh(new THREE.PlaneGeometry(16, 3.2), wallMat);
+    right.rotation.y = -Math.PI / 2;
+    right.position.set(3, 1.6, -5);
+    this.replayScene.add(left, right);
+    this.replayCam = new THREE.PerspectiveCamera(60, 4 / 3, 0.05, 30);
+    this.replayCam.position.set(0, 1.45, 0.2);
+    this.replayRT = new THREE.WebGLRenderTarget(320, 240);
+    this.replayClock = 0;
+    this.tvPlaying = false;
+
+    // Captions drawn over the picture: "NO TAPE PLAYING", then the play bar and timecode
+    this.tvOverlayCanvas = document.createElement('canvas');
+    this.tvOverlayCanvas.width = 256;
+    this.tvOverlayCanvas.height = 192;
+    this.tvOverlayCtx = this.tvOverlayCanvas.getContext('2d');
+    this.tvOverlayTex = new THREE.CanvasTexture(this.tvOverlayCanvas);
+    this.tvOverlayLast = -1;
+    this.drawTvOverlay(0);
+
+    loadRiggedCharacter({
+      mesh: 'animations/enemy-breathing.fbx',
+      clips: { breathing: 'animations/clips/breathing.json', walk: 'animations/clips/enemyWalk.json' },
+      height: 1.9,
+      slimX: 0.8
+    }).then(({ root, clips, speeds }) => {
+      root.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+      root.position.z = -7;
+      this.replayScene.add(root);
+      this.replayActor = root;
+      this.replayRig = new RigPlayer(root, clips, speeds);
+      this.replayRig.play('breathing');
+    }).catch(err => console.warn('Replay character unavailable', err));
+
+    // The office table: 1.3 m long, with its long side along the hall
+    loadGLB('models/office_table.glb').then(gltf => {
+      const table = matte(tidy(gltf.scene.clone(true)));
+      sizeLongest(table, 1.3);
+      const holder = makeHolder();
+      holder.add(table);
+      holder.rotation.y = Math.PI / 2;
+      this.scene.add(holder);
+      standOn(holder, CORNER.x, 0, CORNER.z, table);
+      this.colliders.push(new THREE.Box3().setFromObject(holder));
+    }).catch(err => console.warn('Office table failed to load', err));
+
+    // The old TV: the screen is two planes on its front (+Z): the picture, then the captions over it
+    const tvHolder = makeHolder();
+    tvHolder.userData = { isInteractable: true, type: 'tv_player', name: 'Old TV' };
+    this.scene.add(tvHolder);
+    this.interactables.push(tvHolder);
+    loadGLB('models/old_tv.glb').then(gltf => {
+      const tv = matte(tidy(gltf.scene.clone(true)));
+      this.tvScreenMat = new THREE.MeshBasicMaterial({ map: this.replayRT.texture, color: 0x000000, toneMapped: false });
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.42), this.tvScreenMat);
+      screen.position.set(0, 0.72, 0.5);
+      tv.add(screen);
+      const captions = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.56, 0.42),
+        new THREE.MeshBasicMaterial({ map: this.tvOverlayTex, transparent: true, depthWrite: false })
+      );
+      captions.position.set(0, 0.72, 0.505);
+      tv.add(captions);
+      sizeHeight(tv, 0.5);
+      tvHolder.add(tv);
+      tvHolder.rotation.y = Math.PI / 2;      // the screen faces east, into the hall
+      standOn(tvHolder, CORNER.x, CORNER_TOP_Y, CORNER.tvZ, tv);
+    }).catch(err => console.warn('Old TV failed to load', err));
+  }
+
+  // Advances the Shadow 47 footage: walks toward the camera, lunges, pauses, and repeats
+  stepReplay(delta) {
+    this.replayClock += delta;
+    const a = this.replayActor;
+    if (!a || !this.replayRig) return;
+    const c = this.replayClock % 7;   // walk 4.8 s, lunge 0.8 s, pause 1.4 s
+    let shake = 0;
+    if (c < 4.8) {
+      a.position.z = -7 + c * 1.15;
+      this.replayRig.play('walk', { fade: 0.2 });
+    } else if (c < 5.6) {
+      const k = (c - 4.8) / 0.8;
+      a.position.z = -1.48 + k * 0.9;
+      this.replayRig.play('walk', { fade: 0.05, timeScale: 2.2 });
+      shake = 0.04 * k;
+    } else {
+      a.position.z = -7;
+      this.replayRig.play('breathing', { fade: 0.4 });
+    }
+    this.replayRig.update(delta);
+    this.replayCam.position.set((Math.random() - 0.5) * shake, 1.45 + (Math.random() - 0.5) * shake, 0.2);
+    this.replayCam.lookAt(0, 1.1, a.position.z);
+    this.renderReplay();
+  }
+
+  // Draws the footage into the TV's texture. The renderer's target is restored, so the main frame is unaffected.
+  renderReplay() {
+    const r = this.renderer;
+    if (!r || !this.replayRT || !this.replayActor) return;
+    const prev = r.getRenderTarget();
+    r.setRenderTarget(this.replayRT);
+    r.render(this.replayScene, this.replayCam);
+    r.setRenderTarget(prev);
+  }
+
+  // Shader and program compile for the footage, done before play so the first press does not stall
+  prewarm(renderer) {
+    this.renderer = renderer;
+    this.renderReplay();
+  }
+
+  drawTvOverlay(t) {
+    const g = this.tvOverlayCtx;
+    if (!g) return;
+    const W = 256;
+    const H = 192;
+    g.clearRect(0, 0, W, H);
+    if (!this.tvPlaying) {
+      g.fillStyle = 'rgba(157,255,184,0.85)';
+      g.textAlign = 'center';
+      g.font = 'bold 16px monospace';
+      g.fillText('NO TAPE PLAYING', W / 2, H / 2);
+      g.font = '11px monospace';
+      g.fillText('PRESS E TO PLAY', W / 2, H / 2 + 20);
+    } else {
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+      if (Math.random() < 0.15) {
+        g.fillStyle = 'rgba(255,255,255,0.12)';
+        g.fillRect(0, Math.random() * H, W, 6);
+      }
+      g.fillStyle = 'rgba(157,255,184,0.9)';
+      g.textAlign = 'left';
+      g.font = 'bold 14px monospace';
+      g.fillText('PLAY', 10, 20);
+      const sec = Math.floor(t);
+      const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+      const ss = String(sec % 60).padStart(2, '0');
+      g.textAlign = 'right';
+      g.fillText(`00:${mm}:${ss}`, W - 10, 20);
+      g.textAlign = 'left';
+      g.font = '10px monospace';
+      g.fillText('SHADOW 47 - OCT 31 1997', 10, H - 10);
+    }
+    this.tvOverlayTex.needsUpdate = true;
+  }
+
+  // Starts or stops the footage. Returns whether it is now playing.
+  toggleTv() {
+    this.tvPlaying = !this.tvPlaying;
+    this.replayClock = 0;
+    if (this.tvScreenMat) this.tvScreenMat.color.setScalar(this.tvPlaying ? 1 : 0);
+    this.drawTvOverlay(0);
+    return this.tvPlaying;
+  }
+
   // The found footage: a tape on the autopsy table beside the skelevision, and one on the bedroom floor
   buildTapes() {
     const onTable = modelFactory.createVhsTape(4, 'Tape 04: The Final Log', 'OCT 31 1997');
@@ -468,6 +647,11 @@ export class QuickWorld extends World {
     }
     if (this.exitPlaying && this.exitMixer) this.exitMixer.update(delta);
     if (this.safeMixer) this.safeMixer.update(delta);
+    if (this.tvPlaying) this.stepReplay(delta);
+    if (this.tvOverlayCtx && Math.abs(gameTime - this.tvOverlayLast) > 0.1) {
+      this.tvOverlayLast = gameTime;
+      if (this.tvPlaying) this.drawTvOverlay(this.replayClock);
+    }
     if (this.portal) this.portal.material.uniforms.uTime.value = gameTime;
     return moving;
   }

@@ -161,6 +161,10 @@ export class UIManager {
 
     // Global Key shortcuts
     window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyM' && this.game.levelKind === 'quick') {
+        this.showBannerNotification('NO FACILITY MAP IN THE SHORT RUN.\nFOLLOW THE OBJECTIVE ARROW.');
+        return;
+      }
       if (e.code === 'KeyM') {
         if (this.game.state === 'PLAYING') {
           e.preventDefault();

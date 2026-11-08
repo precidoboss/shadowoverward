@@ -8,7 +8,7 @@ import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
 import { QUICK_INTRO } from './story.js';
-import { QuickWorld, preloadQuickModels, TV_CODE, RIFLE_SPOT } from './quick-world.js';
+import { QuickWorld, preloadQuickModels, TV_CODE, RIFLE_SPOT, CORNER, CORNER_TOP_Y } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
@@ -159,6 +159,7 @@ export class LostFootageGame {
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.world = kind === 'quick' ? new QuickWorld(this.level) : new World(this.level);
+    this.world.renderer = this.renderer;
     // Each map has its own safe code. The quick run's code is the one the skelevision plays.
     this.ui.keypadTarget = kind === 'quick' ? TV_CODE : '1974';
     this.player.world = this.world;
@@ -220,7 +221,7 @@ export class LostFootageGame {
 
   spawnPickups() {
     const spots = this.levelKind === 'quick'
-      ? [{ type: 'rifle', ...RIFLE_SPOT }, { type: 'ammo', x: -9, z: -2.1 }]   // the fuse is inside the bedroom safe
+      ? [{ type: 'rifle', ...RIFLE_SPOT }, { type: 'ammo', x: CORNER.x, y: CORNER_TOP_Y, z: CORNER.ammoZ }]   // the fuse is inside the bedroom safe
       : [{ type: 'rifle', x: -2.5, z: 16.5 }, { type: 'ammo', x: 15.0, z: 4.0 }, { type: 'ammo', x: 1.5, z: -24.0 }];
     for (const s of spots) {
       // Pickups with a fixed height (the rifle on the table) keep their exact spot
@@ -246,6 +247,7 @@ export class LostFootageGame {
     soundEngine.startMusic();
     // Compile shaders up front so the first use of a material doesn't stall play
     this.renderer.compile(this.scene, this.camera);
+    if (this.world.prewarm) this.world.prewarm(this.renderer);
     this.ui.hideMainMenu();
     this.requestPointerLock();
     this.ui.updateObjective(this.story.getCurrentObjective());
@@ -327,6 +329,7 @@ export class LostFootageGame {
     if (data.type === 'vhs_tape') {
       this.story.collectTape(data.tapeId);
       this.player.inventory.tapes.push({ id: data.tapeId, title: data.title, date: data.date });
+      this.ui.showBannerNotification(`TAPE ACQUIRED: ${data.title.toUpperCase()}\nPLAY IT ON THE OLD TV IN THE WEST HALL`);
       target.visible = false;
       target.userData.isInteractable = false;
     }
@@ -445,6 +448,16 @@ export class LostFootageGame {
         this.ui.showBannerNotification("NO TAPES IN POSSESSION.\nSEARCH THE FACILITY FOR VHS CASSETTES.");
       } else {
         this.ui.toggleInventory();
+      }
+    }
+
+    // 9a. Old TV in the west hall: plays Shadow 47 footage, once a tape has been picked up
+    else if (data.type === 'tv_player') {
+      if (this.player.inventory.tapes.length === 0) {
+        this.ui.showBannerNotification('NO TAPE IN THE VCR.\nPICK UP A VHS TAPE FIRST.');
+      } else {
+        const on = this.world.toggleTv();
+        this.ui.showBannerNotification(on ? 'PLAYING: SHADOW 47 FOOTAGE' : 'TV OFF');
       }
     }
 
@@ -605,6 +618,9 @@ export class LostFootageGame {
       this.setPrompt(`[E] INSERT TAPE INTO VCR DECK`);
     } else if (data.type === 'rifle') {
       this.setPrompt(`[E] PICK UP SERVICE RIFLE`);
+    } else if (data.type === 'tv_player') {
+      if (this.player.inventory.tapes.length === 0) this.setPrompt('[E] OLD TV (NEEDS A VHS TAPE)');
+      else this.setPrompt(this.world.tvPlaying ? '[E] STOP THE TV' : '[E] PLAY TAPE ON THE OLD TV');
     } else if (data.type === 'skelevision') {
       this.setPrompt(`[E] REPLAY SKELEVISION`);
     } else if (data.type === 'ammo') {

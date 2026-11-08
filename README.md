@@ -20,7 +20,7 @@ http://localhost:5173/
 - **Shift**: Sprint (drains Stamina bar, heavy footstep noise)
 - **C / Ctrl**: Crouch (quieter movement)
 - **Space**: Jump
-- **E**: Interact (pick up VHS tapes, keys, batteries, open doors, inspect documents, operate keypad safe)
+- **E**: Interact (pick up VHS tapes, keys, batteries, open doors, inspect documents, roll the safe dial, play a tape on the old TV once you have one)
 - **Tab / I**: Open Satchel / Inventory & VCR Tape Viewer
 - **ESC**: Pause Menu / Close open documents & keypad
 
