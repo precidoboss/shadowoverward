@@ -451,6 +451,11 @@ export class LostFootageGame {
       }
     }
 
+    // 9c. CCTV console: switch the feed between the cameras
+    else if (data.type === 'cctv_console') {
+      this.ui.showBannerNotification(`CCTV FEED: ${this.world.cycleCctv()}`);
+    }
+
     // 9a. Old TV in the west hall: plays Shadow 47 footage, once a tape has been picked up
     else if (data.type === 'tv_player') {
       if (this.player.inventory.tapes.length === 0) {
@@ -640,6 +645,8 @@ export class LostFootageGame {
       this.setPrompt(`[E] INSERT TAPE INTO VCR DECK`);
     } else if (data.type === 'rifle') {
       this.setPrompt(`[E] PICK UP SERVICE RIFLE`);
+    } else if (data.type === 'cctv_console') {
+      this.setPrompt('[E] SWITCH CCTV FEED');
     } else if (data.type === 'tv_player') {
       if (this.player.inventory.tapes.length === 0) this.setPrompt('[E] OLD TV (NEEDS A VHS TAPE)');
       else this.setPrompt(this.world.tvPlaying ? '[E] STOP THE TV' : '[E] PLAY TAPE ON THE OLD TV');
@@ -699,6 +706,10 @@ export class LostFootageGame {
     if (this.state === 'PLAYING') {
       this.gameTime += delta;
       this.player.update(delta, this.gameTime);
+      // CCTV: when the player is near the console, draw the selected camera into its screen
+      if (this.levelKind === 'quick' && this.world.cctvNear && this.world.cctvNear(this.player.yawObject.position)) {
+        this.world.renderCctv(this.renderer, [this.weapons.gunFP, this.weapons.gunTP, this.player.characterGroup]);
+      }
       // Quick run safety net: outside the walls means stuck, so bring the player back to the entrance
       if (this.levelKind === 'quick') {
         const pp = this.player.yawObject.position;

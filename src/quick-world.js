@@ -35,6 +35,9 @@ export const RIFLE_SPOT = { x: TABLE.x + 0.36, y: 0.99, z: TABLE.z };
 export const CORNER = { x: -9.0, z: -1.2, tvZ: -1.5, ammoZ: -0.85 };
 export const CORNER_TOP_Y = 0.63;
 
+// The CCTV console: east of the office table, in front of the TV and ammo
+export const CCTV_CONSOLE = { x: -7.6, z: -3.3 };
+
 // The portal swirls once the airlock is open. Both shaders are plain GLSL.
 const PORTAL_VERT = `
   varying vec2 vUv;
@@ -61,7 +64,8 @@ const PORTAL_FRAG = `
 const MODELS = [
   'models/corridor.glb', 'models/bed.glb', 'models/autopsy_table.glb', 'models/skelevision.glb',
   'models/props.glb', 'models/paintings.glb', 'models/generator.glb', 'models/airlock_door.glb',
-  'models/ammo_box.glb', 'models/office_table.glb', 'models/old_tv.glb'
+  'models/ammo_box.glb', 'models/office_table.glb', 'models/old_tv.glb',
+  'models/cctv_console.glb', 'models/cctv_camera.glb'
 ];
 
 // Start fetching as soon as this file loads, so the models are usually ready before Play is pressed
@@ -125,6 +129,7 @@ export class QuickWorld extends World {
     this.buildDressing();       // props and paintings
     this.buildTapes();          // the found footage
     this.buildCornerSet();      // the TV that plays Shadow 47 footage, on the office table
+    this.buildCctv();           // CCTV console with two feeds, cameras in the top corners
   }
 
   // ---------- Entrance: the autopsy table and the skelevision on it ----------
@@ -257,7 +262,7 @@ export class QuickWorld extends World {
       // The rig's skin does not match its bones, so the safe is rebuilt from its bones (see unskin.js)
       const model = matte(tidy(unskinMeshes(cloneSkeleton(gltf.scene))));
       model.traverse(o => { o.frustumCulled = false; });
-      safe.rotation.y = Math.PI / 2;    // the door faces east, into the bedroom
+      safe.rotation.y = -Math.PI / 2;   // the door (front) faces east, into the bedroom; its back is on the wall
       safe.add(model);
       model.scale.setScalar(1);
       const sized = poseBox(model);
@@ -567,6 +572,107 @@ export class QuickWorld extends World {
       g.fillText('SHADOW 47 - OCT 31 1997', 10, H - 10);
     }
     this.tvOverlayTex.needsUpdate = true;
+  }
+
+  // ---------- CCTV: a console with a big screen, showing live feeds from two cameras in the top corners ----------
+  buildCctv() {
+    this.cctvCams = [
+      { name: 'CAM 01 · WEST HALL', pos: new THREE.Vector3(-6.5, 3.6, -3.3), target: new THREE.Vector3(-9.0, 0.9, -1.2) },
+      { name: 'CAM 02 · ENTRANCE', pos: new THREE.Vector3(-2.55, 3.6, -4.1), target: new THREE.Vector3(-3.9, 0.9, -6.6) }
+    ];
+    this.cctvSel = 0;
+    this.cctvFrame = 0;
+    // One render target per feed, and the camera that shoots it, pulled a little forward of the mount
+    this.cctvRT = this.cctvCams.map(() => new THREE.WebGLRenderTarget(384, 288));
+    this.cctvFeed = this.cctvCams.map(c => {
+      const cam = new THREE.PerspectiveCamera(65, 4 / 3, 0.1, 30);
+      const dir = c.target.clone().sub(c.pos).normalize();
+      cam.position.copy(c.pos).addScaledVector(dir, 0.25);
+      cam.lookAt(c.target);
+      return cam;
+    });
+
+    // Console: interactable, and the monitor stands on top of it
+    const holder = makeHolder();
+    holder.userData = { isInteractable: true, type: 'cctv_console', name: 'CCTV Console' };
+    this.scene.add(holder);
+    this.interactables.push(holder);
+    this.cctvHolder = holder;
+
+    loadGLB('models/cctv_console.glb').then(gltf => {
+      const model = tidy(gltf.scene.clone(true));
+      holder.add(model);
+      sizeLongest(model, 1.4);                 // about 1.4 m long
+      const b = new THREE.Box3().setFromObject(model);
+      const c = b.getCenter(new THREE.Vector3());
+      model.position.x += CCTV_CONSOLE.x - c.x;
+      model.position.z += CCTV_CONSOLE.z - c.z;
+      model.position.y += -b.min.y;
+      const placed = new THREE.Box3().setFromObject(model);
+      this.colliders.push(placed);
+
+      // Monitor: a big bezel and screen on top of the console, facing the table (south, +Z)
+      const mon = new THREE.Group();
+      const cx = (placed.min.x + placed.max.x) / 2;
+      const front = placed.max.z;
+      mon.position.set(cx, placed.max.y + 0.5, front - 0.05);
+      const bezel = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.72, 0.06), new THREE.MeshStandardMaterial({ color: 0x0b0f0d, roughness: 0.6 }));
+      mon.add(bezel);
+      this.cctvScreenMat = new THREE.MeshBasicMaterial({ map: this.cctvRT[0].texture, toneMapped: false });
+      const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.6), this.cctvScreenMat);
+      screen.position.z = 0.035;
+      mon.add(screen);
+      // A soft green light in front, so the console reads easily in the dark hall
+      const light = new THREE.PointLight(0x9dffcc, 1.6, 4.5);
+      light.position.set(cx, placed.max.y + 0.6, front + 0.6);
+      holder.add(mon, light);
+      this.cctvMonitor = mon;
+      this.addFlicker(light);
+    }).catch(err => console.warn('CCTV console failed to load', err));
+
+    // Cameras in the top corners, mounted high and aimed at the area they watch
+    for (const c of this.cctvCams) {
+      const mount = makeHolder();
+      this.scene.add(mount);
+      loadGLB('models/cctv_camera.glb').then(gltf => {
+        const model = tidy(gltf.scene.clone(true));
+        mount.add(model);
+        sizeLongest(model, 0.4);
+        mount.position.copy(c.pos);
+        mount.lookAt(c.target);
+      }).catch(err => console.warn('CCTV camera failed to load', err));
+    }
+  }
+
+  // Watching the console is only worth the cost when the player is near it
+  cctvNear(pos) {
+    return this.cctvHolder && Math.hypot(pos.x - CCTV_CONSOLE.x, pos.z - CCTV_CONSOLE.z) < 9;
+  }
+
+  // Renders the selected camera into its feed. Every other frame, and with the monitor and the player hidden,
+  // so the picture shows the level and not the console showing itself.
+  renderCctv(renderer, hide) {
+    if (!this.cctvScreenMat) return;
+    this.cctvFrame++;
+    if (this.cctvFrame % 2) return;
+    const i = this.cctvSel;
+    const was = hide.map(o => (o ? o.visible : false));
+    hide.forEach(o => { if (o) o.visible = false; });
+    this.cctvMonitor.visible = false;
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.cctvRT[i]);
+    renderer.render(this.scene, this.cctvFeed[i]);
+    renderer.setRenderTarget(prev);
+    this.cctvMonitor.visible = true;
+    hide.forEach((o, k) => { if (o) o.visible = was[k]; });
+  }
+
+  // Switches the console to the next camera. Returns the feed's name.
+  cycleCctv() {
+    this.cctvSel = (this.cctvSel + 1) % this.cctvCams.length;
+    this.cctvScreenMat.map = this.cctvRT[this.cctvSel].texture;
+    this.cctvScreenMat.needsUpdate = true;
+    return this.cctvCams[this.cctvSel].name;
   }
 
   // Where the player stands to watch: in the hall, a metre east of the TV, facing it
