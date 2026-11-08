@@ -625,6 +625,21 @@ export class Player {
     this.charHead.visible = fullLen * this.camRatio > 0.7;
   }
 
+  // The camera is parented to the investigator's eye, so it cannot be positioned or aimed in world space while
+  // it stays there. The menu and the walkthrough release it to the scene; play puts it back on the eye.
+  // Attaching also clears the camera's own rotation, which a world-space aim would otherwise leave behind
+  // and show as a tilted view for the rest of the run.
+  releaseCamera(scene) {
+    scene.attach(this.camera);
+  }
+
+  attachCamera() {
+    this.eyeContainer.add(this.camera);
+    this.camera.quaternion.identity();
+    this.camRatio = 1;
+    this.updateViewPerspective();
+  }
+
   toggleViewPerspective() {
     this.viewMode = this.viewMode === 'FIRST_PERSON' ? 'THIRD_PERSON' : 'FIRST_PERSON';
     this.updateViewPerspective();

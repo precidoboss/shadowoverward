@@ -69,6 +69,8 @@ export class LostFootageGame {
     this.world = new World(this.level);
     this.player = new Player(this.camera, this.renderer.domElement, this.world, this.scene);
     this.scene.add(this.player.yawObject);
+    // The menu orbit and the walkthrough place the camera in world space, so it starts out in the scene
+    this.player.releaseCamera(this.scene);
 
     this.entity = new EntityAI(this.scene, this.player);
     this.entity.world = this.world;
@@ -77,6 +79,7 @@ export class LostFootageGame {
 
     this.ui = new UIManager(this);
     this.tour = new CameraTour();
+    this.tour.onEnd = () => this.player.attachCamera();
     this.story = new StoryManager(this.ui);
     this.weapons = new WeaponSystem(this);
     this.spooky = new SpookyLighting(this.world);
@@ -134,7 +137,8 @@ export class LostFootageGame {
     this.loadingReady = Promise.all([investigator, subject, staff]).catch(() => {});
   }
 
-  // Play button: the loading screen stays up for at least five seconds and until the characters are ready
+  // Play button: the loading screen comes up first, then the chosen map is built behind it, so the menu's
+  // lobby never shows. The loading screen stays up for at least a few seconds and until the characters are ready.
   requestStart(kind) {
     soundEngine.init();
     soundEngine.ensureContext();
@@ -142,16 +146,19 @@ export class LostFootageGame {
     this.requestPointerLock();
     this.ui.showLoading();
     const started = performance.now();
-    this.loadingReady.then(() => {
-      const wait = Math.max(0, MIN_LOADING_MS - (performance.now() - started));
-      setTimeout(() => {
-        // Two frames, so the loading screen is painted before the map is built
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          this.startRun(kind);
-          this.ui.hideLoading();
-        }));
-      }, wait);
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (kind !== this.levelKind || kind === 'quick') this.setLevel(kind);
+      this.loadingReady.then(() => {
+        const wait = Math.max(0, MIN_LOADING_MS - (performance.now() - started));
+        setTimeout(() => {
+          // Two frames, so the loading screen is painted before the run begins
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            this.startRun(kind, true);
+            this.ui.hideLoading();
+          }));
+        }, wait);
+      });
+    }));
   }
 
   // Swaps the map: 'full' is the sanatorium, 'quick' the two-room run. Everything placed on the map is rebuilt.
@@ -203,12 +210,18 @@ export class LostFootageGame {
   }
 
   // Begins a run on the given map. A map is rebuilt when it changes, and always on a quick restart.
-  startRun(kind) {
-    if (kind !== this.levelKind || kind === 'quick') this.setLevel(kind);
+  // `prebuilt` means requestStart has already built the map behind the loading screen.
+  startRun(kind, prebuilt = false) {
+    if (!prebuilt && (kind !== this.levelKind || kind === 'quick')) this.setLevel(kind);
     this.resetRun();
+    // Back on the investigator's eye, with no leftover tilt from the menu
+    this.player.attachCamera();
     this.startGame();
     // The quick run opens with the walkthrough; Space, Enter or Escape skips it
-    if (kind === 'quick') this.tour.start(QUICK_TOUR, { x: QUICK_START.x, y: 1.6, z: QUICK_START.z });
+    if (kind === 'quick') {
+      this.player.releaseCamera(this.scene);
+      this.tour.start(QUICK_TOUR, { x: QUICK_START.x, y: 1.6, z: QUICK_START.z });
+    }
   }
 
   spawnMutants(template) {

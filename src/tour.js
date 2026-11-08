@@ -27,18 +27,28 @@ export const QUICK_TOUR = [
 
 function smooth(t) { return t * t * (3 - 2 * t); }
 
+// Share of each stop spent moving; the rest is a hold so the player can read the caption
+const MOVE_SHARE = 0.6;
+// Caption typing speed, in characters per second
+const TYPE_RATE = 42;
+
+// The walkthrough camera. It moves in world space, so the camera must be released from the investigator first.
+// Each stop glides to its view, holds while its caption types out, then moves on.
 export class CameraTour {
   constructor() {
     this.active = false;
     this.stops = [];
     this.i = 0;
     this.t = 0;
+    this.shownChars = -1;
+    this.onEnd = null;
     this.from = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this.to = { pos: new THREE.Vector3(), look: new THREE.Vector3() };
     this.look = new THREE.Vector3();
     this.box = document.getElementById('tour-caption');
     this.text = document.getElementById('tour-text');
-    this.bars = document.getElementById('tour-bars');
+    this.step = document.getElementById('tour-step');
+    this.fill = document.getElementById('tour-progress-fill');
     window.addEventListener('keydown', e => {
       if (this.active && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) {
         e.preventDefault();
@@ -55,7 +65,6 @@ export class CameraTour {
     this.from.pos.set(eye.x, eye.y, eye.z);
     this.from.look.set(stops[0].look[0], stops[0].look[1], stops[0].look[2]);
     this.active = true;
-    this.bars.classList.remove('hidden');
     this.box.classList.remove('hidden');
     this.beginStop();
   }
@@ -64,17 +73,29 @@ export class CameraTour {
     const s = this.stops[this.i];
     this.to.pos.set(s.pos[0], s.pos[1], s.pos[2]);
     this.to.look.set(s.look[0], s.look[1], s.look[2]);
-    this.text.textContent = s.text;
+    this.shownChars = -1;
+    this.step.textContent = `STOP ${String(this.i + 1).padStart(2, '0')} / ${String(this.stops.length).padStart(2, '0')}`;
+    this.fill.style.width = `${(this.i / this.stops.length) * 100}%`;
   }
 
   update(delta, camera) {
     if (!this.active) return;
     const s = this.stops[this.i];
     this.t += delta;
-    const k = smooth(Math.min(this.t / s.time, 1));
+
+    // Glide to the stop's view, then hold on it
+    const k = smooth(Math.min(this.t / (s.time * MOVE_SHARE), 1));
     camera.position.lerpVectors(this.from.pos, this.to.pos, k);
     this.look.lerpVectors(this.from.look, this.to.look, k);
     camera.lookAt(this.look);
+
+    // Caption types out during the stop
+    const chars = Math.min(s.text.length, Math.floor(this.t * TYPE_RATE));
+    if (chars !== this.shownChars) {
+      this.shownChars = chars;
+      this.text.textContent = s.text.slice(0, chars);
+    }
+
     if (this.t >= s.time) {
       this.from.pos.copy(this.to.pos);
       this.from.look.copy(this.to.look);
@@ -89,6 +110,6 @@ export class CameraTour {
     if (!this.active) return;
     this.active = false;
     this.box.classList.add('hidden');
-    this.bars.classList.add('hidden');
+    if (this.onEnd) this.onEnd();
   }
 }

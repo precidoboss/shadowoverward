@@ -176,9 +176,13 @@
       </div>
     </div>
 
-    <!-- In-game walkthrough: letterbox bars and the caption for each stop -->
-    <div id="tour-bars" class="tour-bars hidden"><div class="tour-bar tour-bar-top"></div><div class="tour-bar tour-bar-bottom"></div></div>
-    <div id="tour-caption" class="tour-caption hidden"><div id="tour-text" class="tour-text"></div><div class="tour-skip">[SPACE] SKIP TOUR</div></div>
+    <!-- In-game walkthrough: a caption along the bottom for each stop -->
+    <div id="tour-caption" class="tour-caption hidden">
+      <div id="tour-step" class="tour-step"></div>
+      <div id="tour-text" class="tour-text"></div>
+      <div class="tour-progress"><div id="tour-progress-fill" class="tour-progress-fill"></div></div>
+      <div class="tour-skip">[SPACE] SKIP</div>
+    </div>
 
     <!-- SAFE DIAL MODAL: the combination is rolled on a dial -->
     <div id="safe-keypad-modal" class="modal-overlay hidden">
