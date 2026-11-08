@@ -4,7 +4,7 @@ import { modelFactory } from './models.js';
 import { CORRIDOR_BOXES } from './corridor-data.js';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import {
-  loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreAt, makeHolder, buildHighVoltageFuse, matte
+  loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreAt, makeHolder, buildHighVoltageFuse, matte, poseBox
 } from './props.js';
 import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
 
@@ -251,12 +251,20 @@ export class QuickWorld extends World {
     safe.userData.fuse = fuse;
 
     loadGLB('models/safe.glb').then(gltf => {
-      // The safe is rigged, so it is cloned with its skeleton; a plain clone would lose the bones
+      // The safe is rigged, so it is cloned with its skeleton. It is sized and placed from its posed bounds,
+      // so the size is right whatever scale the rig was exported at.
       const model = matte(tidy(cloneSkeleton(gltf.scene)));
-      sizeHeight(model, 0.85);
+      model.traverse(o => { o.frustumCulled = false; });
       safe.rotation.y = Math.PI / 2;    // the door faces east, into the bedroom
       safe.add(model);
-      centreAt(safe, SAFE.x, SAFE.y, SAFE.z, model);
+      model.scale.setScalar(1);
+      const sized = poseBox(model);
+      const largest = Math.max(sized.max.x - sized.min.x, sized.max.y - sized.min.y, sized.max.z - sized.min.z);
+      model.scale.setScalar(0.85 / (largest || 1));
+      const placed = poseBox(model);
+      const mid = placed.getCenter(new THREE.Vector3());
+      safe.position.add(new THREE.Vector3(SAFE.x, SAFE.y, SAFE.z).sub(mid));
+      safe.updateWorldMatrix(true, true);
 
       // Dial: the knob bone turns about its own shaft (its local Y) as the combination is rolled
       const knob = model.getObjectByName('KnobBone_03');
@@ -279,7 +287,7 @@ export class QuickWorld extends World {
       }
 
       // Lock light on the front of the safe, lit red until it opens
-      const b = new THREE.Box3().setFromObject(model);
+      const b = poseBox(model);
       const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
       led.position.set(b.max.x + 0.01, b.max.y - 0.12, (b.min.z + b.max.z) / 2 + 0.2);
       this.scene.add(led);
@@ -448,16 +456,24 @@ export class QuickWorld extends World {
     this.interactables.push(tvHolder);
     loadGLB('models/old_tv.glb').then(gltf => {
       const tv = matte(tidy(gltf.scene.clone(true)));
-      this.tvScreenMat = new THREE.MeshBasicMaterial({ map: this.replayRT.texture, color: 0x000000, toneMapped: false });
-      const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.42), this.tvScreenMat);
-      screen.position.set(0, 0.72, 0.5);
-      tv.add(screen);
+      this.tvScreenMat = new THREE.MeshBasicMaterial({ map: this.replayRT.texture, color: 0x000000, toneMapped: false, side: THREE.DoubleSide });
+      // The picture is on both faces, so it shows whichever side faces the hallway
+      for (const z of [0.5, -0.5]) {
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.42), this.tvScreenMat);
+        screen.position.set(0, 0.72, z);
+        if (z < 0) screen.rotation.y = Math.PI;
+        tv.add(screen);
+      }
       const captions = new THREE.Mesh(
         new THREE.PlaneGeometry(0.56, 0.42),
-        new THREE.MeshBasicMaterial({ map: this.tvOverlayTex, transparent: true, depthWrite: false })
+        new THREE.MeshBasicMaterial({ map: this.tvOverlayTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
       );
       captions.position.set(0, 0.72, 0.505);
       tv.add(captions);
+      const backCaptions = captions.clone();
+      backCaptions.position.set(0, 0.72, -0.505);
+      backCaptions.rotation.y = Math.PI;
+      tv.add(backCaptions);
       sizeHeight(tv, 0.5);
       tvHolder.add(tv);
       tvHolder.rotation.y = Math.PI / 2;      // the screen faces east, into the hall
@@ -519,6 +535,11 @@ export class QuickWorld extends World {
       g.fillText('NO TAPE PLAYING', W / 2, H / 2);
       g.font = '11px monospace';
       g.fillText('PRESS E TO PLAY', W / 2, H / 2 + 20);
+    } else if (!this.replayActor) {
+      g.fillStyle = 'rgba(157,255,184,0.85)';
+      g.textAlign = 'center';
+      g.font = 'bold 14px monospace';
+      g.fillText('FOOTAGE LOADING...', W / 2, H / 2);
     } else {
       g.fillStyle = 'rgba(0,0,0,0.22)';
       for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
@@ -540,6 +561,11 @@ export class QuickWorld extends World {
       g.fillText('SHADOW 47 - OCT 31 1997', 10, H - 10);
     }
     this.tvOverlayTex.needsUpdate = true;
+  }
+
+  // Where the player stands to watch: in the hall, a metre east of the TV, facing it
+  tvWatchPose() {
+    return { x: CORNER.x + 1.1, z: CORNER.tvZ, yaw: Math.PI / 2 };
   }
 
   // Starts or stops the footage. Returns whether it is now playing.

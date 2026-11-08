@@ -456,7 +456,8 @@ export class LostFootageGame {
       if (this.player.inventory.tapes.length === 0) {
         this.ui.showBannerNotification('NO TAPE IN THE VCR.\nPICK UP A VHS TAPE FIRST.');
       } else {
-        const on = this.world.toggleTv();
+        const on = !this.world.tvPlaying;
+        if (on) this.enterTvWatch(); else this.exitTvWatch();
         this.ui.showBannerNotification(on ? 'PLAYING: SHADOW 47 FOOTAGE' : 'TV OFF');
       }
     }
@@ -481,6 +482,27 @@ export class LostFootageGame {
       target.visible = false;
       target.userData.isInteractable = false;
     }
+  }
+
+  // Watching the TV: step in front of it, facing it, with the camcorder zoom on
+  enterTvWatch() {
+    if (this.world.tvPlaying) return;
+    const p = this.world.tvWatchPose();
+    this.player.yawObject.position.x = p.x;
+    this.player.yawObject.position.z = p.z;
+    this.player.yawObject.rotation.y = p.yaw;
+    this.player.pitchObject.rotation.x = 0;
+    this.tvSavedZoom = this.player.isZoomed;
+    this.player.isZoomed = true;
+    this.watchingTv = true;
+    this.world.toggleTv();
+  }
+
+  // Stops the TV and gives the camera back. Called by E at the TV, by walking away, or when the level ends.
+  exitTvWatch() {
+    if (this.world.tvPlaying) this.world.toggleTv();
+    this.player.isZoomed = this.tvSavedZoom ?? false;
+    this.watchingTv = false;
   }
 
   // The rolled combination turns the brass dial on the safe
@@ -677,6 +699,11 @@ export class LostFootageGame {
     if (this.state === 'PLAYING') {
       this.gameTime += delta;
       this.player.update(delta, this.gameTime);
+      // Walking away from the TV while it plays stops the footage
+      if (this.watchingTv && this.world.tvWatchPose) {
+        const p = this.world.tvWatchPose();
+        if (Math.hypot(this.player.yawObject.position.x - p.x, this.player.yawObject.position.z - p.z) > 2.5) this.exitTvWatch();
+      }
       // Quick run: stepping into the open portal is the way out
       if (this.levelKind === 'quick' && this.world.isInPortal
           && this.world.isInPortal(this.player.yawObject.position.x, this.player.yawObject.position.z)) {

@@ -130,3 +130,21 @@ export function matte(root, metalCap = 0.2) {
   });
   return root;
 }
+
+// Bounds of a model as it is drawn: skinned meshes are measured in their current pose, not their rest geometry
+export function poseBox(obj) {
+  obj.updateWorldMatrix(true, true);
+  const box = new THREE.Box3();
+  const part = new THREE.Box3();
+  obj.traverse(o => {
+    if (!o.isMesh) return;
+    if (o.isSkinnedMesh) {
+      o.computeBoundingBox();
+      part.copy(o.boundingBox).applyMatrix4(o.matrixWorld);
+    } else {
+      part.setFromObject(o);
+    }
+    box.union(part);
+  });
+  return box;
+}
