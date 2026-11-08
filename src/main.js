@@ -699,6 +699,14 @@ export class LostFootageGame {
     if (this.state === 'PLAYING') {
       this.gameTime += delta;
       this.player.update(delta, this.gameTime);
+      // Quick run safety net: outside the walls means stuck, so bring the player back to the entrance
+      if (this.levelKind === 'quick') {
+        const pp = this.player.yawObject.position;
+        if (pp.x < -16 || pp.x > 4.5 || pp.z < -9.4 || pp.z > 9.4) {
+          this.player.yawObject.position.set(QUICK_START.x, 0, QUICK_START.z);
+          this.ui.showBannerNotification('YOU WERE OUTSIDE THE WALLS.\nBACK AT THE ENTRANCE.');
+        }
+      }
       // Walking away from the TV while it plays stops the footage
       if (this.watchingTv && this.world.tvWatchPose) {
         const p = this.world.tvWatchPose();

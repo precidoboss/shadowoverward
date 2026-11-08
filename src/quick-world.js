@@ -7,6 +7,7 @@ import {
   loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreAt, makeHolder, buildHighVoltageFuse, matte, poseBox
 } from './props.js';
 import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
+import { unskinMeshes } from './unskin.js';
 
 // The quick run plays inside the horror corridor model. Two areas matter:
 //  - the north end (the entrance), where the run starts, with the autopsy table and the skelevision
@@ -31,7 +32,7 @@ export const RIFLE_SPOT = { x: TABLE.x + 0.36, y: 0.99, z: TABLE.z };
 
 // The west hall corner: the office table with the old TV on its north end and the ammo box on its south end.
 // The TV faces east into the hall. The table is checked against the walls, so the route stays open.
-export const CORNER = { x: -9.0, z: -1.2, tvZ: -1.55, ammoZ: -0.85 };
+export const CORNER = { x: -9.0, z: -1.2, tvZ: -1.5, ammoZ: -0.85 };
 export const CORNER_TOP_Y = 0.63;
 
 // The portal swirls once the airlock is open. Both shaders are plain GLSL.
@@ -253,7 +254,8 @@ export class QuickWorld extends World {
     loadGLB('models/safe.glb').then(gltf => {
       // The safe is rigged, so it is cloned with its skeleton. It is sized and placed from its posed bounds,
       // so the size is right whatever scale the rig was exported at.
-      const model = matte(tidy(cloneSkeleton(gltf.scene)));
+      // The rig's skin does not match its bones, so the safe is rebuilt from its bones (see unskin.js)
+      const model = matte(tidy(unskinMeshes(cloneSkeleton(gltf.scene))));
       model.traverse(o => { o.frustumCulled = false; });
       safe.rotation.y = Math.PI / 2;    // the door faces east, into the bedroom
       safe.add(model);
@@ -392,8 +394,12 @@ export class QuickWorld extends World {
     // The stage the TV plays: a dark corridor, with the real character (the same rig as in the game)
     this.replayScene = new THREE.Scene();
     this.replayScene.background = new THREE.Color(0x030504);
-    this.replayScene.add(new THREE.AmbientLight(0x6b7f72, 1.0));
-    const lamp = new THREE.PointLight(0xffe2b0, 3, 12);
+    this.replayScene.add(new THREE.AmbientLight(0x9fb3a6, 2.6));
+    const fill = new THREE.DirectionalLight(0xffffff, 1.5);
+    fill.position.set(0, 3, 3);
+    fill.target.position.set(0, 1, -4);
+    this.replayScene.add(fill, fill.target);
+    const lamp = new THREE.PointLight(0xffe2b0, 9, 14);
     lamp.position.set(0, 2.8, -3.5);
     this.replayScene.add(lamp);
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 16), new THREE.MeshStandardMaterial({ color: 0x1a1d1b, roughness: 0.9 }));
@@ -410,7 +416,7 @@ export class QuickWorld extends World {
     this.replayScene.add(left, right);
     this.replayCam = new THREE.PerspectiveCamera(60, 4 / 3, 0.05, 30);
     this.replayCam.position.set(0, 1.45, 0.2);
-    this.replayRT = new THREE.WebGLRenderTarget(320, 240);
+    this.replayRT = new THREE.WebGLRenderTarget(512, 384);
     this.replayClock = 0;
     this.tvPlaying = false;
 
@@ -459,22 +465,22 @@ export class QuickWorld extends World {
       this.tvScreenMat = new THREE.MeshBasicMaterial({ map: this.replayRT.texture, color: 0x000000, toneMapped: false, side: THREE.DoubleSide });
       // The picture is on both faces, so it shows whichever side faces the hallway
       for (const z of [0.5, -0.5]) {
-        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.42), this.tvScreenMat);
-        screen.position.set(0, 0.72, z);
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.66), this.tvScreenMat);
+        screen.position.set(0, 0.7, z);
         if (z < 0) screen.rotation.y = Math.PI;
         tv.add(screen);
       }
       const captions = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.56, 0.42),
+        new THREE.PlaneGeometry(0.92, 0.66),
         new THREE.MeshBasicMaterial({ map: this.tvOverlayTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
       );
-      captions.position.set(0, 0.72, 0.505);
+      captions.position.set(0, 0.7, 0.505);
       tv.add(captions);
       const backCaptions = captions.clone();
-      backCaptions.position.set(0, 0.72, -0.505);
+      backCaptions.position.set(0, 0.7, -0.505);
       backCaptions.rotation.y = Math.PI;
       tv.add(backCaptions);
-      sizeHeight(tv, 0.5);
+      sizeHeight(tv, 0.7);
       tvHolder.add(tv);
       tvHolder.rotation.y = Math.PI / 2;      // the screen faces east, into the hall
       standOn(tvHolder, CORNER.x, CORNER_TOP_Y, CORNER.tvZ, tv);
