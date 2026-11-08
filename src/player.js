@@ -315,20 +315,22 @@ export class Player {
   // characterStatus is 'loading' | 'rigged' | 'fallback' and is shown in the in-game guide.
   startCharacterAnimator() {
     this.characterStatus = 'loading';
-    loadRiggedCharacter({
+    this.rigLoaded = loadRiggedCharacter({
       mesh: 'animations/main-idle.fbx',
       clips: {
-        idle: 'animations/main-idle.fbx',
-        walk: 'animations/walking.fbx',
-        run: 'animations/main-run.fbx',
-        crouchDown: 'animations/main-crouch-down.fbx',
-        crouchIdle: 'animations/main-crouch-idle.fbx',
-        crouchWalk: 'animations/main-crouch-walk.fbx',
-        standUp: 'animations/main-stand-up.fbx'
+        idle: 'animations/clips/idle.json',
+        walk: 'animations/clips/walk.json',
+        run: 'animations/clips/run.json',
+        crouchDown: 'animations/clips/crouchDown.json',
+        crouchIdle: 'animations/clips/crouchIdle.json',
+        crouchWalk: 'animations/clips/crouchWalk.json',
+        standUp: 'animations/clips/standUp.json'
       },
-      height: 1.75
-    }).then(({ root, clips }) => {
-      this.rig = new RigPlayer(root, clips);
+      height: 1.75,
+      // Mixamo models face +z; the game's forward is -z, so turn the body to face away from the camera
+      rotationY: Math.PI
+    }).then(({ root, clips, speeds }) => {
+      this.rig = new RigPlayer(root, clips, speeds);
       this.rig.play('idle');
       this.characterStatus = 'rigged';
       this.characterGroup.visible = false;
@@ -338,20 +340,24 @@ export class Player {
       this.characterStatus = 'fallback';
       console.warn('Investigator model unavailable, showing the basic figure:', err);
     });
+    return this.rigLoaded;
   }
 
   // Chooses the clip for the investigator's current state. Crouching plays a one-shot dip and rise between stances.
   updateRigPose(isMoving) {
     const crouch = this.isCrouching;
+    // Playback rate matches the clip's real travel speed to the player's speed, so the feet do not slide
+    const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    const rate = key => (this.rig.speeds[key] ? THREE.MathUtils.clamp(speed / this.rig.speeds[key], 0.3, 3) : 1);
     if (crouch && !this.wasCrouching) {
       this.rig.play('crouchDown', { once: true, then: 'crouchIdle', fade: 0.2 });
     } else if (!crouch && this.wasCrouching) {
       this.rig.play('standUp', { once: true, then: 'idle', fade: 0.2 });
     } else if (this.rig.current !== 'crouchDown' && this.rig.current !== 'standUp') {
-      if (crouch) this.rig.play(isMoving ? 'crouchWalk' : 'crouchIdle');
+      if (crouch) this.rig.play(isMoving ? 'crouchWalk' : 'crouchIdle', { timeScale: isMoving ? rate('crouchWalk') : 1 });
       else if (!isMoving) this.rig.play('idle');
-      else if (this.isSprinting) this.rig.play('run');
-      else this.rig.play('walk');
+      else if (this.isSprinting) this.rig.play('run', { timeScale: rate('run') });
+      else this.rig.play('walk', { timeScale: rate('walk') });
     }
     this.wasCrouching = crouch;
   }

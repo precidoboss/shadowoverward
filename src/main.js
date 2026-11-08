@@ -52,7 +52,8 @@ export class LostFootageGame {
 
     this.entity = new EntityAI(this.scene, this.player);
     this.entity.world = this.world;
-    this.entity.loadRig();
+    // Load Subject 407 after the investigator, so the two downloads do not compete for the same time
+    this.player.rigLoaded.then(() => this.entity.loadRig());
 
     this.ui = new UIManager(this);
     this.story = new StoryManager(this.ui);

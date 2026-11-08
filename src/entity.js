@@ -89,9 +89,9 @@ export class EntityAI {
   // Swaps the procedural body for the rigged Mixamo character. Its breathing and walking clips drive it.
   async loadRig() {
     try {
-      const { root, clips } = await loadRiggedCharacter({
+      const { root, clips, speeds } = await loadRiggedCharacter({
         mesh: 'animations/enemy-breathing.fbx',
-        clips: { breathing: 'animations/enemy-breathing.fbx', walk: 'animations/enemy-walk.fbx' },
+        clips: { breathing: 'animations/clips/breathing.json', walk: 'animations/clips/enemyWalk.json' },
         height: 1.9,
         slimX: 0.8
       });
@@ -107,7 +107,7 @@ export class EntityAI {
       this.eyeGlow = modelFactory.makeGlow(0x9fe8ff, 0.3);
       this.mesh.add(this.eyeGlow);
       this.mesh.add(root);
-      this.rig = new RigPlayer(root, clips);
+      this.rig = new RigPlayer(root, clips, speeds);
       this.rig.play('breathing');
     } catch (err) {
       console.warn('Subject 407 model unavailable, using the basic body:', err);
@@ -116,7 +116,8 @@ export class EntityAI {
 
   // Walk clip speed follows the entity's speed, so patrol looks slow and the chase looks quick.
   animateRig(delta, speed) {
-    if (speed > 0.01) this.rig.play('walk', { fade: 0.2, timeScale: THREE.MathUtils.clamp(speed / 1.6, 0.7, 2.4) });
+    // Foot speed follows the entity's real speed (patrol and chase use different rates)
+    if (speed > 0.01) this.rig.play('walk', { fade: 0.2, timeScale: THREE.MathUtils.clamp(speed / this.rig.speeds.walk, 0.3, 3) });
     else this.rig.play('breathing', { fade: 0.4 });
     this.rig.update(delta);
     this.placeEyes();
