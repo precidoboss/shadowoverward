@@ -1,3 +1,4 @@
+import { CameraTour, QUICK_TOUR } from './tour.js';
 import * as THREE from 'three';
 import { World } from './world.js';
 import { Player } from './player.js';
@@ -75,6 +76,7 @@ export class LostFootageGame {
     this.fullPatrol = this.entity.patrolPoints.slice();
 
     this.ui = new UIManager(this);
+    this.tour = new CameraTour();
     this.story = new StoryManager(this.ui);
     this.weapons = new WeaponSystem(this);
     this.spooky = new SpookyLighting(this.world);
@@ -205,6 +207,8 @@ export class LostFootageGame {
     if (kind !== this.levelKind || kind === 'quick') this.setLevel(kind);
     this.resetRun();
     this.startGame();
+    // The quick run opens with the walkthrough; Space, Enter or Escape skips it
+    if (kind === 'quick') this.tour.start(QUICK_TOUR, { x: QUICK_START.x, y: 1.6, z: QUICK_START.z });
   }
 
   spawnMutants(template) {
@@ -709,6 +713,14 @@ export class LostFootageGame {
 
     if (this.state === 'PLAYING') {
       this.gameTime += delta;
+      // The walkthrough owns the camera: the world keeps running, the player and enemies wait
+      if (this.tour.active) {
+        this.tour.update(delta, this.camera);
+        this.world.update(delta, this.gameTime);
+        this.renderer.render(this.scene, this.camera);
+        this.vhsEffect.render(this.gameTime, 0.05, false);
+        return;
+      }
       this.player.update(delta, this.gameTime);
       // CCTV: when the player is near the console, draw the selected camera into its screen
       if (this.levelKind === 'quick' && this.world.cctvNear && this.world.cctvNear(this.player.yawObject.position)) {

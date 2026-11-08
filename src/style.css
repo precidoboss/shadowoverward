@@ -944,3 +944,15 @@ canvas {
 .cl-todo { color: #8fa69a; }
 .cl-optional { color: #d9c26a; }
 .cl-how { margin: 8px 0 2px; padding: 6px 8px; border-left: 3px solid #33ff55; background: rgba(51, 255, 85, 0.07); color: #e8fff0; }
+
+
+/* In-game walkthrough: letterbox bars and captions */
+.tour-bars { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+.tour-bars.hidden, .tour-caption.hidden { display: none; }
+.tour-bar { position: absolute; left: 0; right: 0; height: 13vh; background: #000; }
+.tour-bar-top { top: 0; }
+.tour-bar-bottom { bottom: 0; }
+.tour-caption { position: fixed; left: 0; right: 0; bottom: 4vh; z-index: 41; text-align: center; pointer-events: none; }
+.tour-text { display: inline-block; max-width: 70%; padding: 12px 22px; background: rgba(0, 0, 0, 0.6); color: #e8fff0;
+  font-family: monospace; font-size: clamp(14px, 1.6vw, 22px); letter-spacing: 1px; line-height: 1.45; }
+.tour-skip { margin-top: 10px; color: #8fa69a; font-family: monospace; font-size: 12px; letter-spacing: 2px; }
