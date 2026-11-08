@@ -351,6 +351,7 @@ export class Player {
     }).then(({ root, clips, speeds }) => {
       this.rig = new RigPlayer(root, clips, speeds);
       this.rig.play('idle');
+      this.buildFirstPersonHands(root);
       this.characterStatus = 'rigged';
       this.characterGroup.visible = false;
       this.yawObject.add(root);
@@ -459,6 +460,124 @@ export class Player {
     this.animateCharacter(delta, isMoving);
   }
 
+  // First-person hands taken from the investigator's own rig.
+  // The rig is skinned to its skeleton, so it cannot follow the camera. Instead the right and left hand, with
+  // the forearm and coat sleeve, are copied out in the hand bone's bind pose as a rigid mesh. That copy is
+  // then aligned to the camcorder: fingers forward, forearm running back and down, computed from the bones.
+  buildFirstPersonHands(root) {
+    const SIDES = [
+      { side: 'Right', wrist: new THREE.Vector3(0.08, -0.01, 0.10), elbowDir: new THREE.Vector2(0.35, -0.9) },
+      { side: 'Left', wrist: new THREE.Vector3(-0.04, -0.07, 0.08), elbowDir: new THREE.Vector2(-0.35, -0.9) }
+    ];
+    const skins = [];
+    root.traverse(o => { if (o.isSkinnedMesh) skins.push(o); });
+    if (!skins.length) return;
+    const scale = root.scale.y;
+    const built = [];
+
+    try {
+      for (const { side, wrist, elbowDir } of SIDES) {
+        const handRe = new RegExp(`(^|:)${side}(ForeArm|Hand(Index|Middle|Ring|Pinky|Thumb)?\\d*)$`);
+        const wristRe = new RegExp(`(^|:)${side}Hand$`);
+        const fingerRe = /(Index|Middle|Ring|Pinky|Thumb)\d*$/;
+        const foreRe = /ForeArm\d*$/;
+
+        for (const skin of skins) {
+          const bones = skin.skeleton.bones;
+          const inv = skin.skeleton.boneInverses;
+          const wristIdx = bones.findIndex(b => wristRe.test(b.name));
+          if (wristIdx < 0) continue;
+          const inSet = new Set();
+          bones.forEach((b, i) => { if (handRe.test(b.name)) inSet.add(i); });
+          if (!inSet.size) continue;
+
+          const geo = skin.geometry;
+          const pos = geo.attributes.position;
+          const nor = geo.attributes.normal;
+          const uv = geo.attributes.uv;
+          const sIdx = geo.attributes.skinIndex;
+          const sWgt = geo.attributes.skinWeight;
+          const index = geo.index ? geo.index.array : null;
+          const triCount = (index ? index.length : pos.count) / 3;
+
+          // Dominant bone of each vertex
+          const dominant = (v) => {
+            let best = 0, bw = -1;
+            for (let k = 0; k < 4; k++) {
+              const w = sWgt.getComponent(v, k);
+              if (w > bw) { bw = w; best = sIdx.getComponent(v, k); }
+            }
+            return best;
+          };
+
+          // Keep whole triangles that belong to the hand, forearm or sleeve
+          const frameMat = inv[wristIdx];
+          const outP = [], outN = [], outU = [];
+          const fingerSum = new THREE.Vector3(), foreSum = new THREE.Vector3();
+          let fingerN = 0, foreN = 0;
+          const tmp = new THREE.Vector3(), tmpN = new THREE.Vector3();
+          for (let t = 0; t < triCount; t++) {
+            const vs = index ? [index[t * 3], index[t * 3 + 1], index[t * 3 + 2]] : [t * 3, t * 3 + 1, t * 3 + 2];
+            const bonesOf = vs.map(dominant);
+            const hits = bonesOf.filter(b => inSet.has(b)).length;
+            if (hits < 2) continue;
+            for (let k = 0; k < 3; k++) {
+              const v = vs[k];
+              tmp.fromBufferAttribute(pos, v).applyMatrix4(frameMat);
+              tmpN.fromBufferAttribute(nor, v).transformDirection(frameMat);
+              outP.push(tmp.x, tmp.y, tmp.z);
+              outN.push(tmpN.x, tmpN.y, tmpN.z);
+              if (uv) outU.push(uv.getX(v), uv.getY(v));
+              const name = bones[bonesOf[k]].name;
+              if (fingerRe.test(name)) { fingerSum.add(tmp); fingerN++; }
+              if (foreRe.test(name)) { foreSum.add(tmp); foreN++; }
+            }
+          }
+          if (!outP.length) continue;
+
+          // Direction of the fingers and of the forearm, measured in the hand's own frame
+          const fingers = fingerN ? fingerSum.divideScalar(fingerN).normalize() : new THREE.Vector3(0, 1, 0);
+          const forearm = foreN ? foreSum.divideScalar(foreN).normalize() : new THREE.Vector3(0, -1, 0);
+          // Fingers point forward (-Z in the view); then roll so the forearm runs back and down to the elbow
+          const q1 = new THREE.Quaternion().setFromUnitVectors(fingers, new THREE.Vector3(0, 0, -1));
+          const a1 = forearm.clone().applyQuaternion(q1);
+          const cur = Math.atan2(a1.y, a1.x);
+          const want = Math.atan2(elbowDir.y, elbowDir.x);
+          const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), want - cur);
+          const q = new THREE.Quaternion().multiplyQuaternions(q2, q1);
+
+          const g = new THREE.BufferGeometry();
+          g.setAttribute('position', new THREE.Float32BufferAttribute(outP, 3));
+          g.setAttribute('normal', new THREE.Float32BufferAttribute(outN, 3));
+          if (outU.length) g.setAttribute('uv', new THREE.Float32BufferAttribute(outU, 2));
+          const mat = (Array.isArray(skin.material) ? skin.material[0] : skin.material).clone();
+          mat.skinning = false;
+          mat.needsUpdate = true;
+          const mesh = new THREE.Mesh(g, mat);
+          mesh.castShadow = false;
+
+          const holder = new THREE.Group();
+          holder.position.copy(wrist);
+          holder.quaternion.copy(q);
+          holder.scale.setScalar(scale);
+          holder.add(mesh);
+          this.fpsEquip.add(holder);
+          built.push(holder);
+          break;   // one copy per hand is enough
+        }
+      }
+    } catch (err) {
+      console.warn('First-person hands could not be built, keeping the basic hands:', err);
+      built.forEach(h => this.fpsEquip.remove(h));
+      return;
+    }
+
+    if (built.length === 2) {
+      this.fpsRigHands = built;
+      (this.fpsBoxHands || []).forEach(o => { o.visible = false; });
+    }
+  }
+
   // 2. UPGRADED FIRST-PERSON EQUIPMENT & HANDS
   createDetailedFpsEquipment() {
     this.fpsEquip = new THREE.Group();
@@ -532,6 +651,7 @@ export class Player {
     const handL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.04, 0.12), skinMat);
     handL.position.set(-0.04, -0.07, 0.01);
     this.fpsEquip.add(handL);
+    this.fpsBoxHands = [armR, handR, armL, handL];   // replaced by the rig's real hands when they load
 
     this.camera.add(this.fpsEquip);
   }
