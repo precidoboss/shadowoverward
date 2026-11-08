@@ -10,6 +10,7 @@ export class SoundEngine {
     this.heartbeatTimeout = null;
     this.heartbeatRate = 1200;
     this.isHeartbeatPlaying = false;
+    this.heartbeatLastUpdate = 0;   // when the entity last reported its danger level
     this.volume = 0.85;
 
     // Auto-unlock on first user interaction
@@ -456,6 +457,14 @@ export class SoundEngine {
 
     const beat = () => {
       if (!this.isHeartbeatPlaying || !this.ctx) return;
+      // The heartbeat only keeps going while the entity keeps reporting danger. It stops on its own when
+      // that report goes quiet (pause, menus, game over, restart) or the sound is off. Without this check,
+      // the timer kept thumping forever because nothing ever called stopHeartbeat.
+      const quiet = performance.now() - this.heartbeatLastUpdate > 400;
+      if (quiet || this.isMuted || !this.musicWanted) {
+        this.stopHeartbeat();
+        return;
+      }
       const now = this.ctx.currentTime;
 
       // 1st thump
@@ -491,6 +500,7 @@ export class SoundEngine {
   }
 
   updateHeartbeatRate(dangerLevel) {
+    this.heartbeatLastUpdate = performance.now();
     if (dangerLevel > 0.08) {
       if (!this.isHeartbeatPlaying) this.startHeartbeat();
       this.heartbeatRate = 1200 - dangerLevel * 820;

@@ -95,9 +95,9 @@ export const QUICK_INTRO = [
 const QUICK_OBJECTIVES = [
   { text: 'Pick up the dropped rifle [E]', log: 'FOOTAGE: HE DROPPED THE RIFLE RUNNING.', target: { x: -4.5, z: -4.5 }, locationName: 'NORTH HALL' },
   { text: 'Clear the 2 infected staff in the halls', log: 'FOOTAGE: THEY WERE STAFF ONCE.\nTHEIR BADGES ARE STILL ON.', target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
-  { text: 'Take the fuse from the bedroom [E]', log: 'FOOTAGE: THE FUSE IS IN THE BEDROOM.\nTHE SHEETS ARE STILL WARM.', target: { x: -14.2, z: 4.9 }, locationName: 'BEDROOM' },
-  { text: 'Put the fuse in the generator [E]', log: 'FOOTAGE: POWER BACK ON SOUTH.\nSOMETHING IS WATCHING THE LIGHTS.', target: { x: -5.4, z: 7.9 }, locationName: 'GENERATOR' },
-  { text: 'Kill Shadow 47, then open the fire exit [E]', log: 'FOOTAGE: THE TAPE ENDS HERE.\nMAKE YOURS END DIFFERENTLY.', target: { x: -3.7, z: 8.3 }, locationName: 'FIRE EXIT' }
+  { text: 'Open the bedroom safe for the fuse [E]', log: 'FOOTAGE: THE TV ON THE TABLE SHOWED THE CODE.\nTHE SAFE IS IN THE BEDROOM. THE SHEETS ARE STILL WARM.', target: { x: -14.4, z: 4.6 }, locationName: 'BEDROOM' },
+  { text: 'Put the fuse in the generator [E]', log: 'FOOTAGE: POWER BACK ON SOUTH.\nSOMETHING IS WATCHING THE LIGHTS.', target: { x: -5.85, z: 7.5 }, locationName: 'GENERATOR' },
+  { text: 'Kill Shadow 47, then open the fire exit [E]', log: 'FOOTAGE: THE TAPE ENDS HERE.\nMAKE YOURS END DIFFERENTLY.', target: { x: -3.9, z: 8.3 }, locationName: 'FIRE EXIT' }
 ];
 
 export class StoryManager {

@@ -8,7 +8,7 @@ import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
 import { QUICK_INTRO } from './story.js';
-import { QuickWorld, preloadQuickModels } from './quick-world.js';
+import { QuickWorld, preloadQuickModels, TV_CODE } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
@@ -18,7 +18,7 @@ const MIN_LOADING_MS = 2500;
 const BOSS_HIT_DAMAGE = 35;
 const QUICK_MUTANT_SPAWNS = [[-8, -2.1], [-9, 5]];
 const FULL_START = { x: 0, z: 19 };
-const QUICK_START = { x: -4.5, z: -7 };
+const QUICK_START = { x: -4.85, z: -6.6 };   // just inside the entrance, beside the autopsy table
 
 export class LostFootageGame {
   constructor() {
@@ -159,6 +159,8 @@ export class LostFootageGame {
     this.level = new THREE.Group();
     this.scene.add(this.level);
     this.world = kind === 'quick' ? new QuickWorld(this.level) : new World(this.level);
+    // Each map has its own safe code. The quick run's code is the one the skelevision plays.
+    this.ui.keypadTarget = kind === 'quick' ? TV_CODE : '1974';
     this.player.world = this.world;
     this.player.hoveredObject = null;
     this.entity.world = this.world;
@@ -218,7 +220,7 @@ export class LostFootageGame {
 
   spawnPickups() {
     const spots = this.levelKind === 'quick'
-      ? [{ type: 'rifle', x: -4.5, z: -4.5 }, { type: 'fuse', x: -14.2, z: 4.9 }, { type: 'ammo', x: -9, z: -2.1 }]
+      ? [{ type: 'rifle', x: -4.5, z: -4.5 }, { type: 'ammo', x: -9, z: -2.1 }]   // the fuse is inside the bedroom safe
       : [{ type: 'rifle', x: -2.5, z: 16.5 }, { type: 'ammo', x: 15.0, z: 4.0 }, { type: 'ammo', x: 1.5, z: -24.0 }];
     for (const s of spots) createPickup(this, s.type, findFreeSpot(this.world, s.x, s.z, 0.3));
   }
@@ -437,6 +439,11 @@ export class LostFootageGame {
       }
     }
 
+    // 9b. Skelevision on the autopsy table: plays the safe code again
+    else if (data.type === 'skelevision') {
+      this.ui.showBannerNotification(`SKELEVISION PLAYBACK\nSAFE CODE:  ${TV_CODE.split('').join(' - ')}`);
+    }
+
     // 10. Service rifle and ammunition
     else if (data.type === 'rifle') {
       this.weapons.acquireRifle(14);
@@ -491,6 +498,10 @@ export class LostFootageGame {
         safe.userData.morgueKey.visible = true;
         safe.userData.morgueKey.userData.isInteractable = true;
       }
+      if (safe.userData.fuse) {
+        safe.userData.fuse.visible = true;
+        safe.userData.fuse.userData.isInteractable = true;
+      }
     }
   }
 
@@ -508,6 +519,7 @@ export class LostFootageGame {
   // Shadow 47 is down: the fire exit opens
   onBossDown() {
     this.bossDown = true;
+    if (this.world.openExit) this.world.openExit();   // quick run: the airlock slides open
     this.entity.isActive = false;
     soundEngine.playPipeGroan();
     this.ui.showBannerNotification("SHADOW 47 IS DOWN.\nTHE FIRE EXIT IS OPEN.");
@@ -576,6 +588,8 @@ export class LostFootageGame {
       this.setPrompt(`[E] INSERT TAPE INTO VCR DECK`);
     } else if (data.type === 'rifle') {
       this.setPrompt(`[E] PICK UP SERVICE RIFLE`);
+    } else if (data.type === 'skelevision') {
+      this.setPrompt(`[E] REPLAY SKELEVISION`);
     } else if (data.type === 'ammo') {
       this.setPrompt(`[E] TAKE RIFLE AMMO`);
     }

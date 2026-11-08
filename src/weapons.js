@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { modelFactory } from './models.js';
+import { loadGLB, tidy, sizeHeight, standOn } from './props.js';
 import { soundEngine } from './audio.js';
 import { CombatFX, haptic } from './effects.js';
 
@@ -13,7 +14,6 @@ const FLASH_TIME = 0.06;
 
 const gunMetal = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.5, metalness: 0.6 });
 const gunWood = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.8 });
-const ammoMat = new THREE.MeshStandardMaterial({ color: 0x55663a, roughness: 0.9 });
 const fuseMat = new THREE.MeshStandardMaterial({ color: 0xd9b400, roughness: 0.4, metalness: 0.3 });
 
 const gunPoly = new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.75, metalness: 0.15 });
@@ -85,12 +85,18 @@ export function buildRifleMesh(hands = false) {
 }
 
 // Ammo box on the floor. Its rounds are added when it is picked up.
+// Rifle ammunition: the uploaded ammo box model. It loads once and is shared by every pickup.
+// The group is positioned before the model arrives, so the model is centred on that spot when it loads.
 function buildAmmoBox() {
   const g = new THREE.Group();
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.16, 0.2), ammoMat);
-  box.position.y = 0.08;
-  box.castShadow = true;
-  g.add(box);
+  loadGLB('models/ammo_box.glb').then(gltf => {
+    const model = tidy(gltf.scene.clone(true));
+    model.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.add(model);
+    sizeHeight(model, 0.46);
+    g.rotation.y = Math.random() * Math.PI * 2;
+    standOn(g, g.position.x, 0, g.position.z, model);
+  }).catch(err => console.warn('Ammo box failed to load', err));
   return g;
 }
 
