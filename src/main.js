@@ -287,6 +287,20 @@ export class LostFootageGame {
     this.ui.showPauseMenu();
   }
 
+  // Leaves the run for the main menu. The sanatorium lobby is the menu backdrop, so the full map is restored.
+  returnToMainMenu() {
+    if (this.tour.active) this.tour.end();
+    if (this.watchingTv) this.exitTvWatch();
+    this.state = 'MENU';
+    this.clearBriefing();
+    soundEngine.pauseMusic();
+    document.exitPointerLock();
+    this.player.releaseCamera(this.scene);
+    if (this.levelKind !== 'full') this.setLevel('full');
+    this.ui.hidePauseMenu();
+    this.ui.showMainMenu();
+  }
+
   resumeGame() {
     this.state = 'PLAYING';
     soundEngine.ensureContext();

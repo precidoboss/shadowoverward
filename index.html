@@ -44,6 +44,7 @@
         </div>
         <div style="display: flex; align-items: center; gap: 18px;">
           <button id="hud-audio-status" class="hud-audio-pill" style="pointer-events: auto;">🔊 AUDIO ON</button>
+          <button id="hud-pause" class="hud-audio-pill" style="pointer-events: auto;">❚❚ PAUSE [P]</button>
           <div class="cam-battery-container">
             <span style="font-size: 18px;">CAM PWR</span>
             <div class="cam-battery-outline">
@@ -124,29 +125,52 @@
         <button id="btn-start-quick" class="retro-btn">QUICK RUN: LAST TAPE</button>
         <button id="btn-controls" class="retro-btn">HOW TO PLAY</button>
         <button id="btn-settings" class="retro-btn">SETTINGS</button>
+        <button id="btn-credits" class="retro-btn">CREDITS</button>
+      </div>
+      <div class="menu-footer">
+        <div>[P] PAUSE &nbsp;·&nbsp; [ESC] CLOSE MENUS &nbsp;·&nbsp; [N] NIGHT VISION</div>
+        <div>HEADPHONES RECOMMENDED &nbsp;·&nbsp; BUILD 2.0</div>
       </div>
     </div>
 
-    <!-- CONTROLS & INSTRUCTIONS MODAL -->
+    <!-- HOW TO PLAY MODAL -->
     <div id="controls-modal" class="modal-overlay hidden">
-      <div class="retro-panel">
-        <h2 class="retro-title">INVESTIGATOR BRIEFING</h2>
-        <p style="margin-bottom: 16px; line-height: 1.5;">
-          You have broken into the abandoned <strong>St. Jude's Psychiatric Facility</strong> to recover <strong>4 missing VHS tapes</strong> that prove what truly happened during the 1974 containment breach.
-        </p>
-        <div style="background: rgba(0,0,0,0.4); padding: 16px; border-radius: 4px; margin-bottom: 20px; line-height: 1.8;">
-          <div><strong>W, A, S, D</strong> : Move Investigator</div>
-          <div><strong>MOUSE</strong> : Look & Aim Camcorder</div>
-          <div><strong>V</strong> : Toggle 1st Person / 3rd Person View (See your character!)</div>
-          <div><strong>F</strong> : Toggle Flashlight (Conserves Battery!)</div>
-          <div><strong>E</strong> : Pick up Tapes, Keys, Batteries & Interact with Doors, the Safe Dial and the Old TV</div>
-          <div><strong>SHIFT</strong> : Sprint (Creates heavy noise!)</div>
-          <div><strong>TAB / I</strong> : Open Inventory & VCR Tape Viewer</div>
-          <div><strong>ESC</strong> : Pause Menu</div>
+      <div class="retro-panel modal-scroll">
+        <h2 class="retro-title">HOW TO PLAY</h2>
+        <p class="modal-lead">You have broken into the abandoned <strong>St. Jude's Psychiatric Facility</strong> on Halloween night, 1997. Recover the lost VHS tapes, stop what hunts the wards, and get out.</p>
+
+        <h3 class="modal-heading">CONTROLS</h3>
+        <div class="key-grid">
+          <div><kbd>W A S D</kbd> Move</div>
+          <div><kbd>MOUSE</kbd> Look and aim</div>
+          <div><kbd>LEFT CLICK</kbd> Punch, or fire the rifle</div>
+          <div><kbd>Q</kbd> Switch punch / rifle</div>
+          <div><kbd>RIGHT CLICK</kbd> Camcorder zoom</div>
+          <div><kbd>E</kbd> Interact: tapes, keys, doors, safe, TV</div>
+          <div><kbd>SHIFT</kbd> Sprint (loud)</div>
+          <div><kbd>C</kbd> / <kbd>CTRL</kbd> Crouch (quiet)</div>
+          <div><kbd>SPACE</kbd> Jump</div>
+          <div><kbd>F</kbd> Flashlight</div>
+          <div><kbd>N</kbd> Night vision</div>
+          <div><kbd>V</kbd> 1st / 3rd person view</div>
+          <div><kbd>M</kbd> Facility map (full run)</div>
+          <div><kbd>TAB</kbd> / <kbd>I</kbd> Satchel and VCR</div>
+          <div><kbd>P</kbd> Pause</div>
+          <div><kbd>ESC</kbd> Pause menu / close windows</div>
         </div>
-        <p style="color: #ff5555; margin-bottom: 20px;">
-          ⚠ <strong>SURVIVAL WARNING:</strong> Subject 407 still roams the darkened wards. It hears running footsteps and sees your flashlight beam. If your camera glitches frantically and your heart races... turn off your light and HIDE.
-        </p>
+
+        <h3 class="modal-heading">OBJECTIVES</h3>
+        <p class="modal-text"><strong>Full run:</strong> find the four VHS tapes. Tape 01 is in Ward A, Tape 02 in Ward B, Tape 03 in the wall safe in Dr. Holloway's office (code <kbd>1974</kbd>), and Tape 04 on the autopsy table in the morgue. Restore generator power, stop Shadow 47, and escape through the fire exit.</p>
+        <p class="modal-text"><strong>Quick run:</strong> recover the rifle and the tape, open the bedroom safe (code <kbd>0 4 0 7</kbd>, shown on the skelevision), take the high-voltage fuse to the generator, stop the creature, and walk into the portal.</p>
+
+        <h3 class="modal-heading">SURVIVAL</h3>
+        <ul class="modal-list">
+          <li>Running is loud. Walk or crouch near Subject 407 to stay hidden.</li>
+          <li>Direct flashlight beams draw its attention. Turn the light off when it is close.</li>
+          <li>When your camcorder glitches and your heartbeat races, it is near. Hide.</li>
+          <li>Your health slowly recovers when you stay out of harm's way.</li>
+        </ul>
+
         <button id="btn-close-controls" class="retro-btn">UNDERSTOOD</button>
       </div>
     </div>
@@ -155,24 +179,56 @@
     <div id="settings-modal" class="modal-overlay hidden">
       <div class="retro-panel">
         <h2 class="retro-title">SETTINGS</h2>
-        <div style="margin-bottom: 20px;">
-          <label style="display: block; margin-bottom: 8px;">Mouse Sensitivity</label>
-          <input type="range" id="slider-sensitivity" min="1.0" max="4.0" step="0.1" value="2.2" style="width: 100%;" />
+        <div class="setting-row">
+          <label for="slider-sensitivity">Mouse sensitivity <span id="val-sensitivity" class="setting-value"></span></label>
+          <input type="range" id="slider-sensitivity" min="1.0" max="4.0" step="0.1" value="2.2" />
         </div>
-        <div style="margin-bottom: 25px;">
-          <label style="display: block; margin-bottom: 8px;">Master Audio Volume</label>
-          <input type="range" id="slider-volume" min="0.0" max="1.0" step="0.05" value="0.75" style="width: 100%;" />
+        <div class="setting-row">
+          <label for="slider-volume">Master volume <span id="val-volume" class="setting-value"></span></label>
+          <input type="range" id="slider-volume" min="0.0" max="1.0" step="0.05" value="0.75" />
         </div>
-        <button id="btn-close-settings" class="retro-btn">SAVE & RETURN</button>
+        <div class="setting-row setting-check">
+          <label for="check-invert-y"><input type="checkbox" id="check-invert-y" /> Invert vertical mouse</label>
+        </div>
+        <p class="modal-text setting-note">Settings are saved on this device.</p>
+        <button id="btn-reset-settings" class="retro-btn">RESET TO DEFAULTS</button>
+        <button id="btn-close-settings" class="retro-btn">SAVE &amp; RETURN</button>
+      </div>
+    </div>
+
+    <!-- CREDITS MODAL -->
+    <div id="credits-modal" class="modal-overlay hidden">
+      <div class="retro-panel">
+        <h2 class="retro-title">CREDITS</h2>
+        <div class="credits-block">
+          <div class="credits-role">DESIGN &amp; DEVELOPMENT</div>
+          <div>Bth</div>
+        </div>
+        <div class="credits-block">
+          <div class="credits-role">BUILT WITH</div>
+          <div>Three.js &nbsp;·&nbsp; Web Audio API &nbsp;·&nbsp; Vite</div>
+        </div>
+        <div class="credits-block">
+          <div class="credits-role">CHARACTER ANIMATION</div>
+          <div>Mixamo</div>
+        </div>
+        <div class="credits-block">
+          <div class="credits-role">SPECIAL THANKS</div>
+          <div>Everyone who ran the wards</div>
+        </div>
+        <button id="btn-close-credits" class="retro-btn">BACK</button>
       </div>
     </div>
 
     <!-- PAUSE MENU -->
     <div id="pause-menu" class="modal-overlay hidden">
-      <div class="retro-panel" style="max-width: 400px; text-align: center;">
+      <div class="retro-panel" style="max-width: 420px; text-align: center;">
         <h2 class="retro-title">PAUSED</h2>
-        <button id="btn-resume" class="retro-btn">RESUME FOOTAGE</button>
-        <button id="btn-pause-settings" class="retro-btn" onclick="document.getElementById('settings-modal').classList.remove('hidden')">SETTINGS</button>
+        <button id="btn-resume" class="retro-btn">RESUME FOOTAGE [P]</button>
+        <button id="btn-pause-restart" class="retro-btn">RESTART RUN</button>
+        <button id="btn-pause-howto" class="retro-btn">HOW TO PLAY</button>
+        <button id="btn-pause-settings" class="retro-btn">SETTINGS</button>
+        <button id="btn-pause-menu" class="retro-btn">MAIN MENU</button>
       </div>
     </div>
 

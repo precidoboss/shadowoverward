@@ -52,6 +52,7 @@ export class Player {
     this.canJump = true;
     this.isLocked = false;
     this.mouseSensitivity = 0.0022;
+    this.invertY = false;
 
     // Stamina
     this.stamina = 100;
@@ -673,7 +674,7 @@ export class Player {
 
       const sens = this.isZoomed ? this.mouseSensitivity * 0.45 : this.mouseSensitivity;
       this.yawObject.rotation.y -= movementX * sens;
-      this.pitchObject.rotation.x -= movementY * sens;
+      this.pitchObject.rotation.x -= movementY * sens * (this.invertY ? -1 : 1);
       this.pitchObject.rotation.x = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, this.pitchObject.rotation.x));
     });
 

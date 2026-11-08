@@ -2,6 +2,9 @@
 import { soundEngine } from './audio.js';
 import { TAPES_DATABASE } from './story.js';
 
+const SETTINGS_KEY = 'shadowOverWardB.settings';
+const DEFAULT_SETTINGS = { sensitivity: 2.2, volume: 0.75, invertY: false };
+
 export class UIManager {
   constructor(game) {
     this.game = game;
@@ -77,17 +80,63 @@ export class UIManager {
     });
 
     // Sliders
+    // Settings are saved on this device and applied before the first run
+    this.settings = this.loadSettings();
+    this.applySettings();
+
     const sensSlider = document.getElementById('slider-sensitivity');
     sensSlider.addEventListener('input', (e) => {
-      if (this.game.player) {
-        this.game.player.mouseSensitivity = parseFloat(e.target.value) * 0.001;
-      }
+      this.settings.sensitivity = parseFloat(e.target.value);
+      this.applySettings();
+      this.saveSettings();
     });
 
     const volSlider = document.getElementById('slider-volume');
     volSlider.addEventListener('input', (e) => {
-      soundEngine.setVolume(parseFloat(e.target.value));
+      this.settings.volume = parseFloat(e.target.value);
+      this.applySettings();
       soundEngine.ensureContext();
+      this.saveSettings();
+    });
+
+    document.getElementById('check-invert-y').addEventListener('change', (e) => {
+      this.settings.invertY = e.target.checked;
+      this.applySettings();
+      this.saveSettings();
+    });
+
+    document.getElementById('btn-reset-settings').addEventListener('click', () => {
+      this.settings = { ...DEFAULT_SETTINGS };
+      this.applySettings();
+      this.saveSettings();
+      this.showBannerNotification('SETTINGS RESTORED TO DEFAULTS');
+    });
+
+    // Credits and the menu's extra screens
+    document.getElementById('btn-credits').addEventListener('click', () => {
+      document.getElementById('credits-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-close-credits').addEventListener('click', () => {
+      document.getElementById('credits-modal').classList.add('hidden');
+    });
+
+    // Pause: HUD button, and the pause menu actions
+    document.getElementById('hud-pause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this.game.state === 'PLAYING') this.game.pauseGame();
+    });
+    document.getElementById('btn-pause-howto').addEventListener('click', () => {
+      this.controlsModal.classList.remove('hidden');
+    });
+    document.getElementById('btn-pause-settings').addEventListener('click', () => {
+      this.settingsModal.classList.remove('hidden');
+    });
+    document.getElementById('btn-pause-restart').addEventListener('click', () => {
+      this.hidePauseMenu();
+      this.game.restartGame();
+    });
+    document.getElementById('btn-pause-menu').addEventListener('click', () => {
+      this.game.returnToMainMenu();
     });
 
     // Audio status button toggle & test chime
@@ -181,7 +230,21 @@ export class UIManager {
           e.preventDefault();
           this.closeInventory();
         }
+      } else if (e.code === 'KeyP') {
+        // P pauses during a run and resumes from the pause menu, unless a window is open over it
+        if (this.game.state === 'PLAYING') {
+          e.preventDefault();
+          this.game.pauseGame();
+        } else if (this.game.state === 'PAUSED' && !this.openModal()) {
+          e.preventDefault();
+          this.game.resumeGame();
+        }
       } else if (e.code === 'Escape') {
+        // Escape closes the top window first: how to play, settings or credits
+        if (this.closeTopModal()) {
+          e.preventDefault();
+          return;
+        }
         if (this.game.state === 'PLAYING') {
           this.game.pauseGame();
         } else if (this.game.state === 'PAUSED') {
@@ -219,6 +282,52 @@ export class UIManager {
     // Starting a run (including a retry) must also clear the end-of-run screens
     this.gameOverScreen.classList.add('hidden');
     this.victoryScreen.classList.add('hidden');
+  }
+
+  // The window currently open over the menus, if any
+  openModal() {
+    return ['controls-modal', 'settings-modal', 'credits-modal']
+      .map(id => document.getElementById(id))
+      .find(el => el && !el.classList.contains('hidden')) || null;
+  }
+
+  closeTopModal() {
+    const open = this.openModal();
+    if (!open) return false;
+    open.classList.add('hidden');
+    return true;
+  }
+
+  loadSettings() {
+    try {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    } catch (err) {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  saveSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings));
+    } catch (err) {
+      // Storage can be blocked; the settings still apply for this visit
+    }
+  }
+
+  // Pushes the saved settings into the controls, the player and the audio
+  applySettings() {
+    const s = this.settings;
+    const set = (id, fn) => { const el = document.getElementById(id); if (el) fn(el); };
+    set('slider-sensitivity', el => { el.value = s.sensitivity; });
+    set('val-sensitivity', el => { el.textContent = s.sensitivity.toFixed(1); });
+    set('slider-volume', el => { el.value = s.volume; });
+    set('val-volume', el => { el.textContent = `${Math.round(s.volume * 100)}%`; });
+    set('check-invert-y', el => { el.checked = s.invertY; });
+    if (this.game.player) {
+      this.game.player.mouseSensitivity = s.sensitivity * 0.001;
+      this.game.player.invertY = s.invertY;
+    }
+    soundEngine.setVolume(s.volume);
   }
 
   showPauseMenu() {

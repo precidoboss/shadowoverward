@@ -964,3 +964,33 @@ canvas {
 .tour-progress { height: 2px; margin-top: 8px; background: rgba(125, 255, 158, 0.18); }
 .tour-progress-fill { height: 100%; width: 0; background: #7dff9e; transition: width 0.4s ease; }
 .tour-skip { margin-top: 8px; color: #8fa69a; font-family: monospace; font-size: 12px; letter-spacing: 2px; text-align: right; }
+
+/* ---------- Menus, settings and pause (added in build 2.0) ---------- */
+.menu-footer {
+  position: absolute; bottom: 24px; left: 0; right: 0; text-align: center;
+  font-family: 'VT323', monospace; font-size: 18px; letter-spacing: 1px; color: #6f8a78;
+  line-height: 1.4; pointer-events: none;
+}
+.modal-scroll { max-height: 84vh; overflow-y: auto; max-width: 720px; }
+.modal-lead, .modal-text { line-height: 1.5; margin-bottom: 14px; font-size: 15px; }
+.modal-heading {
+  font-family: 'VT323', monospace; font-size: 26px; color: #7dff9e; letter-spacing: 2px;
+  margin: 18px 0 8px; border-bottom: 1px solid rgba(51, 255, 85, 0.25); padding-bottom: 4px;
+}
+.key-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; font-size: 14px; line-height: 1.4; }
+kbd {
+  display: inline-block; min-width: 26px; padding: 1px 6px; margin-right: 4px;
+  border: 1px solid #33ff55; border-radius: 3px; background: #0b120c; color: #7dff9e;
+  font-family: 'Share Tech Mono', monospace; font-size: 12px; text-align: center;
+}
+.modal-list { margin: 0 0 16px 18px; line-height: 1.6; font-size: 15px; }
+.setting-row { margin-bottom: 20px; }
+.setting-row label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.setting-row input[type=range] { width: 100%; accent-color: #33ff55; }
+.setting-value { color: #7dff9e; }
+.setting-check label { justify-content: flex-start; gap: 10px; cursor: pointer; }
+.setting-check input[type=checkbox] { width: 18px; height: 18px; accent-color: #33ff55; }
+.setting-note { font-size: 13px; opacity: 0.7; margin-bottom: 12px; }
+.credits-block { margin-bottom: 16px; font-size: 18px; line-height: 1.4; }
+.credits-role { font-family: 'VT323', monospace; font-size: 20px; color: #7dff9e; letter-spacing: 2px; }
+.pause-hint { margin-top: 10px; font-size: 13px; opacity: 0.6; }
