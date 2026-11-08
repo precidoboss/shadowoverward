@@ -56,11 +56,8 @@ export class UIManager {
 
   bindEvents() {
     // Start button
-    document.getElementById('btn-start-game').addEventListener('click', () => {
-      soundEngine.init();
-      soundEngine.ensureContext();
-      this.game.startGame();
-    });
+    document.getElementById('btn-start-game').addEventListener('click', () => this.game.requestStart('full'));
+    document.getElementById('btn-start-quick').addEventListener('click', () => this.game.requestStart('quick'));
 
     // Controls button
     document.getElementById('btn-controls').addEventListener('click', () => {
@@ -254,6 +251,11 @@ export class UIManager {
     const text = document.getElementById('loading-text');
     if (fill) fill.style.width = `${pct}%`;
     if (text) text.innerText = `LOADING ${label}... ${pct}%`;
+  }
+
+  showLoading() {
+    const screen = document.getElementById('loading-screen');
+    if (screen) screen.classList.remove('hidden');
   }
 
   hideLoading() {

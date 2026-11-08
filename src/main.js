@@ -7,6 +7,7 @@ import { StoryManager } from './story.js';
 import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
+import { QuickWorld } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
@@ -14,6 +15,9 @@ import { findFreeSpot } from './collision.js';
 // The loading screen stays up at least this long, so the wait reads as deliberate
 const MIN_LOADING_MS = 5000;
 const BOSS_HIT_DAMAGE = 35;
+const QUICK_MUTANT_SPAWNS = [[-2.5, 7.5], [3, 6.5]];
+const FULL_START = { x: 0, z: 19 };
+const QUICK_START = { x: 0, z: 12.5 };
 
 export class LostFootageGame {
   constructor() {
@@ -56,12 +60,18 @@ export class LostFootageGame {
     this.vhsEffect = new VhsShaderEffect(this.container);
 
     // Initialize Game Systems
-    this.world = new World(this.scene);
+    // The map lives in its own group, so switching between the sanatorium and the quick run removes the old one
+    this.levelKind = 'full';
+    this.level = new THREE.Group();
+    this.scene.add(this.level);
+    this.world = new World(this.level);
     this.player = new Player(this.camera, this.renderer.domElement, this.world, this.scene);
     this.scene.add(this.player.yawObject);
 
     this.entity = new EntityAI(this.scene, this.player);
     this.entity.world = this.world;
+    this.fullSpawn = this.entity.spawnPos.clone();
+    this.fullPatrol = this.entity.patrolPoints.slice();
 
     this.ui = new UIManager(this);
     this.story = new StoryManager(this.ui);
@@ -96,7 +106,6 @@ export class LostFootageGame {
   }
 
   startLoading() {
-    const started = performance.now();
     let done = 0;
     const total = 3;
     const step = label => {
@@ -118,13 +127,84 @@ export class LostFootageGame {
         step('INFECTED STAFF (UNAVAILABLE)');
       });
 
-    Promise.all([investigator, subject, staff]).catch(() => {}).then(() => {
+    // Loading starts at page load; the loading screen only appears when a start button is pressed
+    this.loadingReady = Promise.all([investigator, subject, staff]).catch(() => {});
+  }
+
+  // Play button: the loading screen stays up for at least five seconds and until the characters are ready
+  requestStart(kind) {
+    soundEngine.init();
+    soundEngine.ensureContext();
+    // Pointer lock must be requested inside the click, so it is taken here
+    this.requestPointerLock();
+    this.ui.showLoading();
+    const started = performance.now();
+    this.loadingReady.then(() => {
       const wait = Math.max(0, MIN_LOADING_MS - (performance.now() - started));
-      setTimeout(() => this.ui.hideLoading(), wait);
+      setTimeout(() => {
+        // Two frames, so the loading screen is painted before the map is built
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          this.startRun(kind);
+          this.ui.hideLoading();
+        }));
+      }, wait);
     });
   }
 
+  // Swaps the map: 'full' is the sanatorium, 'quick' the two-room run. Everything placed on the map is rebuilt.
+  setLevel(kind) {
+    this.levelKind = kind;
+    this.scene.remove(this.level);
+    this.level = new THREE.Group();
+    this.scene.add(this.level);
+    this.world = kind === 'quick' ? new QuickWorld(this.level) : new World(this.level);
+    this.player.world = this.world;
+    this.player.hoveredObject = null;
+    this.entity.world = this.world;
+    this.spooky.world = this.world;
+    this.story.setLevel(kind);
+    this.placeLevelActors();
+    this.spawnPickups();
+    this.arrangeMutants();
+  }
+
+  // Where Subject 407 waits and patrols for each map
+  placeLevelActors() {
+    if (this.levelKind === 'quick') {
+      this.entity.spawnPos.set(3, 0, -8.5);
+      this.entity.patrolPoints = [new THREE.Vector3(3, 0, -8.5), new THREE.Vector3(-2.5, 0, -2.8)];
+    } else {
+      this.entity.spawnPos.copy(this.fullSpawn);
+      this.entity.patrolPoints = this.fullPatrol.slice();
+    }
+    this.entity.mesh.position.copy(this.entity.spawnPos);
+  }
+
+  // Places the infected staff for the current map. Extra ones on a smaller map are hidden and count as down.
+  arrangeMutants() {
+    const spawns = this.levelKind === 'quick' ? QUICK_MUTANT_SPAWNS : MUTANT_SPAWNS;
+    this.mutants.forEach((m, i) => {
+      m.world = this.world;
+      const spot = spawns[i];
+      if (!spot) {
+        m.dead = true;
+        m.group.visible = false;
+        return;
+      }
+      m.spawn.copy(findFreeSpot(this.world, spot[0], spot[1], 0.35));
+      m.reset();
+    });
+  }
+
+  // Begins a run on the given map. A map is rebuilt when it changes, and always on a quick restart.
+  startRun(kind) {
+    if (kind !== this.levelKind || kind === 'quick') this.setLevel(kind);
+    this.resetRun();
+    this.startGame();
+  }
+
   spawnMutants(template) {
+    this.mutantTemplate = template;
     this.mutants = MUTANT_SPAWNS.map(([x, z]) => new Mutant({
       scene: this.scene,
       template,
@@ -132,14 +212,13 @@ export class LostFootageGame {
       player: this.player,
       spawn: findFreeSpot(this.world, x, z, 0.35)
     }));
+    this.arrangeMutants();
   }
 
   spawnPickups() {
-    const spots = [
-      { type: 'rifle', x: -2.5, z: 16.5 },
-      { type: 'ammo', x: 15.0, z: 4.0 },
-      { type: 'ammo', x: 1.5, z: -24.0 }
-    ];
+    const spots = this.levelKind === 'quick'
+      ? [{ type: 'rifle', x: -3.5, z: 12.5 }, { type: 'fuse', x: 4.5, z: 3.2 }, { type: 'ammo', x: 4.5, z: -2.0 }]
+      : [{ type: 'rifle', x: -2.5, z: 16.5 }, { type: 'ammo', x: 15.0, z: 4.0 }, { type: 'ammo', x: 1.5, z: -24.0 }];
     for (const s of spots) createPickup(this, s.type, findFreeSpot(this.world, s.x, s.z, 0.3));
   }
 
@@ -179,8 +258,13 @@ export class LostFootageGame {
   }
 
   restartGame() {
-    // Player
-    this.player.yawObject.position.set(0, 0, 19);
+    this.startRun(this.levelKind);
+  }
+
+  // Resets the investigator, the map state and the story for a fresh run on the current map
+  resetRun() {
+    const start = this.levelKind === 'quick' ? QUICK_START : FULL_START;
+    this.player.yawObject.position.set(start.x, 0, start.z);
     this.player.yawObject.rotation.set(0, 0, 0);
     this.player.pitchObject.rotation.set(0, 0, 0);
     this.player.battery = 100;
@@ -195,15 +279,14 @@ export class LostFootageGame {
     this.player.inventory.batteriesCount = 0;
     this.player.inventory.notesRead = [];
 
-    // World pickups, doors, safe, generator; the entity, infected staff and weapons back to the start
-    this.world.reset();
+    // The full sanatorium is reset in place; the quick map was just rebuilt by startRun
+    if (this.levelKind === 'full') this.world.reset();
     this.entity.reset();
-    this.mutants.forEach(m => m.reset());
+    this.arrangeMutants();
     this.weapons.reset();
     this.spooky.reset();
     this.bossDown = false;
 
-    // Story progress
     this.story.currentObjectiveIndex = 0;
     this.story.tapeFound = { 1: false, 2: false, 3: false, 4: false };
     this.story.generatorPowered = false;
@@ -212,7 +295,6 @@ export class LostFootageGame {
     this.clearBriefing();
     this.lastProximityWarning = -Infinity;
     this.gameTime = 0;
-    this.startGame();
   }
 
   // Handle Player Interaction ([E] Key)
@@ -235,7 +317,7 @@ export class LostFootageGame {
       if (data.reqKey) {
         if (data.reqKey === 'all_tapes_and_power') {
           // Fire Exit Door in Basement
-          if (!this.story.allTapesCollected()) {
+          if (!this.story.quick && !this.story.allTapesCollected()) {
             soundEngine.playLockedDoor();
             this.ui.showBannerNotification("FIRE EXIT SEALED:\nRECOVER ALL 4 LOST VHS TAPES FIRST!");
             return;
@@ -298,7 +380,7 @@ export class LostFootageGame {
       this.ui.showBannerNotification("ACQUIRED: HIGH-VOLTAGE FUSE\n[Use at Basement Generator]");
       target.visible = false;
       target.userData.isInteractable = false;
-      this.story.advanceObjective(5);
+      this.story.advanceObjective(this.story.quick ? 3 : 5);
     }
 
     // 6. Documents & Case Notes
@@ -323,7 +405,7 @@ export class LostFootageGame {
         soundEngine.playKeypadBeep(true);
         data.led.material.color.setHex(0x00ff00);
         this.ui.showBannerNotification("POWER RESTORED TO BASEMENT!\nSHADOW 47 IS AWAKE");
-        this.story.advanceObjective(6);
+        this.story.advanceObjective(this.story.quick ? 4 : 6);
         soundEngine.playPipeGroan();
         if (!this.entity.isActive) {
           this.entity.activate();
@@ -345,6 +427,7 @@ export class LostFootageGame {
     // 10. Service rifle and ammunition
     else if (data.type === 'rifle') {
       this.weapons.acquireRifle(12);
+      if (this.story.quick) this.story.advanceObjective(1);
       soundEngine.playItemPickup();
       this.ui.showBannerNotification("RECOVERED: SERVICE RIFLE + 12 ROUNDS\n[Q] SWITCH WEAPON  •  [LEFT CLICK] FIRE");
       target.visible = false;
@@ -553,6 +636,11 @@ export class LostFootageGame {
           this.onHit(ATTACK_DAMAGE, 'INFECTED STAFF HIT YOU!');
           if (this.state !== 'PLAYING') return;
         }
+      }
+
+      if (this.levelKind === 'quick' && this.story.currentObjectiveIndex === 1
+          && this.mutants.every(m => m.dead || !m.group.visible)) {
+        this.story.advanceObjective(2);
       }
 
       // Procedural lighting follows how close the danger is

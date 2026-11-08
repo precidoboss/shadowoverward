@@ -13,6 +13,7 @@ const FLASH_TIME = 0.06;
 const gunMetal = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.5, metalness: 0.6 });
 const gunWood = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.8 });
 const ammoMat = new THREE.MeshStandardMaterial({ color: 0x55663a, roughness: 0.9 });
+const fuseMat = new THREE.MeshStandardMaterial({ color: 0xd9b400, roughness: 0.4, metalness: 0.3 });
 
 // Procedural service rifle, pointing down its local -z. The Shooter Pack has animations for a rifle
 // but no rifle mesh, so the gun is built from boxes and cylinders.
@@ -49,21 +50,25 @@ function buildAmmoBox() {
   return g;
 }
 
-// Places a rifle or ammo pickup on the floor. It is an interactable, so [E] picks it up.
+// Places a rifle, ammo or fuse pickup on the floor. It is an interactable, so [E] picks it up.
 export function createPickup(game, type, spot) {
-  const group = type === 'rifle' ? buildRifleMesh() : buildAmmoBox();
+  let group;
+  if (type === 'rifle') group = buildRifleMesh();
+  else if (type === 'fuse') {
+    group = new THREE.Group();
+    const fuse = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.08), fuseMat);
+    fuse.position.y = 0.1;
+    group.add(fuse);
+  } else group = buildAmmoBox();
   if (type === 'rifle') {
     group.rotation.set(0, 0.6, 0);
     group.position.set(spot.x, 0.07, spot.z);
   } else {
     group.position.set(spot.x, 0, spot.z);
   }
-  group.userData = {
-    isInteractable: true,
-    type,
-    name: type === 'rifle' ? 'Service Rifle' : 'Rifle Ammo'
-  };
-  game.scene.add(group);
+  const names = { rifle: 'Service Rifle', ammo: 'Rifle Ammo', fuse: 'High-Voltage Fuse' };
+  group.userData = { isInteractable: true, type, name: names[type] };
+  game.level.add(group);
   game.world.interactables.push(group);
   return group;
 }

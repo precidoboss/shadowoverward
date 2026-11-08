@@ -85,6 +85,14 @@ export const TAPES_DATABASE = {
   }
 };
 
+const QUICK_OBJECTIVES = [
+  { text: 'Take the service rifle from the reception desk', target: { x: -3.5, z: 12.5 }, locationName: 'RECEPTION DESK' },
+  { text: 'Put down the infected staff in the reception', target: { x: 0.0, z: 7.0 }, locationName: 'RECEPTION' },
+  { text: 'Take the high-voltage fuse by the doorway', target: { x: 4.5, z: 3.2 }, locationName: 'DOORWAY' },
+  { text: 'Restore power at the generator in the morgue', target: { x: -4.8, z: -9.5 }, locationName: 'MORGUE GENERATOR' },
+  { text: 'Destroy Shadow 47, then take the fire exit', target: { x: 0.0, z: -11.5 }, locationName: 'FIRE EXIT' }
+];
+
 export class StoryManager {
   constructor(ui) {
     this.ui = ui;
@@ -99,10 +107,20 @@ export class StoryManager {
       { text: 'Recover Final Tape 04 in Morgue & Escape Fire Exit!', target: { x: 0.0, z: -34.8 }, locationName: 'EMERGENCY FIRE EXIT' }
     ];
 
+    this.fullObjectives = this.objectives;
+    this.quick = false;
+
     this.tapeFound = { 1: false, 2: false, 3: false, 4: false };
     this.generatorPowered = false;
     this.safeUnlocked = false;
     this.gameCompleted = false;
+  }
+
+  // 'full' is the sanatorium; 'quick' is the two-room run with its own objectives
+  setLevel(kind) {
+    this.quick = kind === 'quick';
+    this.objectives = this.quick ? QUICK_OBJECTIVES : this.fullObjectives;
+    this.currentObjectiveIndex = 0;
   }
 
   getCurrentObjective() {
