@@ -111,7 +111,7 @@ export class StoryManager {
       { text: 'Unlock Wall Safe in Dr. Holloway\'s Office (Tape 03 & Key)', target: { x: 16.5, z: 6.5 }, locationName: 'OFFICE SAFE' },
       { text: 'Retrieve High-Voltage Fuse from Ward B (Tape 02)', target: { x: 14.5, z: -9.5 }, locationName: 'WARD B QUARANTINE' },
       { text: 'Unlock Basement & Install Fuse into the Generator', target: { x: -8.0, z: -25.0 }, locationName: 'BASEMENT GENERATOR' },
-      { text: 'Recover Final Tape 04 in Morgue & Escape Fire Exit!', target: { x: 0.0, z: -34.8 }, locationName: 'EMERGENCY FIRE EXIT' }
+      { text: 'Get all 4 tapes, restore power at the breaker, stop Shadow 47, then take the fire exit', target: { x: 0.0, z: -34.8 }, locationName: 'EMERGENCY FIRE EXIT' }
     ];
 
     this.fullObjectives = this.objectives;

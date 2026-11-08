@@ -491,7 +491,7 @@ export class LostFootageGame {
     this.player.yawObject.position.x = p.x;
     this.player.yawObject.position.z = p.z;
     this.player.yawObject.rotation.y = p.yaw;
-    this.player.pitchObject.rotation.x = 0;
+    this.player.pitchObject.rotation.x = p.pitch;
     this.tvSavedZoom = this.player.isZoomed;
     this.player.isZoomed = true;
     this.watchingTv = true;

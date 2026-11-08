@@ -571,7 +571,11 @@ export class QuickWorld extends World {
 
   // Where the player stands to watch: in the hall, a metre east of the TV, facing it
   tvWatchPose() {
-    return { x: CORNER.x + 1.1, z: CORNER.tvZ, yaw: Math.PI / 2 };
+    // 1.3 m in front of the screen (the screen is at x = CORNER.x + 0.3), looking straight at its centre
+    const x = CORNER.x + 1.6;
+    const screenY = CORNER_TOP_Y + 0.7 * (0.7 / 1.19);   // middle of the screen on the table
+    const eyeY = 1.6;
+    return { x, z: CORNER.tvZ, yaw: Math.PI / 2, pitch: Math.atan2(screenY - eyeY, 1.3) };
   }
 
   // Starts or stops the footage. Returns whether it is now playing.
