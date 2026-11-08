@@ -504,7 +504,8 @@ export class LostFootageGame {
 
     // 9b. Skelevision on the autopsy table: plays the safe code again
     else if (data.type === 'skelevision') {
-      this.ui.showBannerNotification(`SKELEVISION PLAYBACK\nSAFE CODE:  ${TV_CODE.split('').join(' - ')}`);
+      const tvCode = this.world.tvCode || TV_CODE;
+      this.ui.showBannerNotification(`SKELEVISION PLAYBACK\nSAFE CODE:  ${tvCode.split('').join(' - ')}`);
     }
 
     // 10. Service rifle and ammunition

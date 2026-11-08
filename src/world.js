@@ -188,6 +188,10 @@ export class World {
       // Electrical box beside the basement generator, and an effigy in the morgue
       place('PowerBox', 0.67, -11.6, -22.5, Math.PI / 2, { y: 1.1 });
       place('Effigy', 1.6, 5.5, -31.5, Math.PI, { y: 0.5 });
+      // More barrels (the 'cans' in the pack), kept off the doorways
+      place('Barrel', 0.9, -10.0, -21.0, 0.3, { solid: true });
+      place('Barrel', 0.9, 8.8, -26.5, 0, { solid: true });
+      place('Barrel', 0.9, 10.2, -31.0, 0.9, { solid: true });
     }).catch(err => console.warn('Prop pack failed to load', err));
 
     loadGLB('models/paintings.glb').then(gltf => {
@@ -198,16 +202,65 @@ export class World {
         const part = makeHolder();
         const model = tidy(src.clone(true), { doubleSide: true });
         part.add(model);
-        sizeHeight(model, 1.25);
+        sizeHeight(model, 1.5);
         part.rotation.y = yaw;
         this.scene.add(part);
         centreAt(part, x, y, z, model);
       };
-      hang('Plane.003_0', -16.7, 1.8, 8.5, Math.PI / 2);   // Ward A, west wall
-      hang('Plane.001_1', -2.7, 1.7, 8.5, Math.PI / 2);    // central corridor, west wall
-      hang('Plane.005_4', 2.7, 1.7, 8.5, -Math.PI / 2);    // central corridor, east wall
-      hang('Plane.007_6', 16.7, 1.8, 3.5, -Math.PI / 2);   // Dr. Holloway's office, east wall
+      // Each one hangs 0.2 m off its wall, at eye height, facing into the room
+      hang('Plane.003_0', -16.8, 1.7, 8.5, Math.PI / 2);   // Ward A, west wall
+      hang('Plane.001_1', -2.8, 1.7, 8.5, Math.PI / 2);    // central corridor, west wall
+      hang('Plane.005_4', 2.8, 1.7, 8.5, -Math.PI / 2);    // central corridor, east wall
+      hang('Plane.007_6', 16.8, 1.7, 3.5, -Math.PI / 2);   // Dr. Holloway's office, east wall
+      hang('Plane.002_2', -16.8, 1.7, -6.0, Math.PI / 2);  // Ward A, room 102
+      hang('Plane.004_3', 16.8, 1.7, -9.0, -Math.PI / 2);  // Ward B, east wall
     }).catch(err => console.warn('Paintings failed to load', err));
+
+    // Ammo boxes: one in Ward B, one in the basement
+    loadGLB('models/ammo_box.glb').then(gltf => {
+      for (const [x, z, yaw] of [[15.2, -2.4, 0.3], [-12.6, -17.5, -0.4]]) {
+        const part = makeHolder();
+        const model = tidy(gltf.scene.clone(true));
+        part.add(model);
+        sizeLongest(model, 0.45);
+        part.rotation.y = yaw;
+        this.scene.add(part);
+        standOn(part, x, 0, z, model);
+      }
+    }).catch(err => console.warn('Ammo box failed to load', err));
+
+    // Dr. Holloway's office: a spooky table with the old TV on it
+    loadGLB('models/office_table.glb').then(gltf => {
+      const part = makeHolder();
+      const model = tidy(gltf.scene.clone(true));
+      part.add(model);
+      sizeLongest(model, 1.6);
+      this.scene.add(part);
+      standOn(part, 9.0, 0, 1.6, model);
+      this.colliders.push(new THREE.Box3().setFromObject(part));
+      const topY = new THREE.Box3().setFromObject(part).max.y;
+      loadGLB('models/old_tv.glb').then(tvGltf => {
+        const tv = makeHolder();
+        const tvModel = tidy(tvGltf.scene.clone(true));
+        tv.add(tvModel);
+        sizeLongest(tvModel, 0.5);
+        this.scene.add(tv);
+        standOn(tv, 9.0, topY, 1.6, tvModel);
+      }).catch(err => console.warn('Old TV failed to load', err));
+    }).catch(err => console.warn('Office table failed to load', err));
+
+    // Reception lobby: the autopsy table, with the skelevision on it showing the safe code
+    loadGLB('models/autopsy_table.glb').then(gltf => {
+      const part = makeHolder();
+      const model = tidy(gltf.scene.clone(true));
+      part.add(model);
+      sizeLongest(model, 2.1);
+      this.scene.add(part);
+      standOn(part, 0, 0, 21.5, model);
+      this.colliders.push(new THREE.Box3().setFromObject(part));
+      const topY = new THREE.Box3().setFromObject(part).max.y;
+      this.buildFullSkelevision(topY, 0, 21.5);
+    }).catch(err => console.warn('Autopsy table failed to load', err));
 
     // Cameras: one in every area, mounted under the ceiling (3.8 m) and aimed at the room
     this.cctvCams = [
@@ -278,6 +331,77 @@ export class World {
         mount.lookAt(c.target);
       }).catch(err => console.warn('CCTV camera failed to load', err));
     }
+  }
+
+  // The skelevision: a screen on the autopsy table that plays the safe code on a loop
+  buildFullSkelevision(topY, x, z) {
+    this.tvCode = '1974';
+    this.tvCanvas = document.createElement('canvas');
+    this.tvCanvas.width = 256;
+    this.tvCanvas.height = 192;
+    this.tvCtx = this.tvCanvas.getContext('2d');
+    this.tvTexture = new THREE.CanvasTexture(this.tvCanvas);
+    this.tvLast = -1;
+
+    const tv = makeHolder();
+    tv.userData = { isInteractable: true, type: 'skelevision', name: 'Skelevision' };
+    this.scene.add(tv);
+    this.interactables.push(tv);
+
+    loadGLB('models/skelevision.glb').then(gltf => {
+      const model = gltf.scene.clone(true);
+      tidy(model);
+      model.traverse(o => {
+        if (o.isMesh && o.material && o.material.name === 'screegn') {
+          o.material = new THREE.MeshBasicMaterial({ map: this.tvTexture, toneMapped: false });
+        }
+      });
+      tv.add(model);
+      sizeHeight(model, 0.7);
+      tv.rotation.y = -Math.PI / 2;   // the screen faces east, into the lobby
+      standOn(tv, x, topY, z, model);
+      this.drawFullSkelevision(0);
+    }).catch(err => console.warn('Skelevision failed to load', err));
+
+    const tvLight = new THREE.PointLight(0x9dffb8, 0.9, 3.2);
+    tvLight.position.set(x - 0.3, topY + 1.0, z);
+    this.scene.add(tvLight);
+    this.addFlicker(tvLight);
+  }
+
+  // Static, then the code appears one digit at a time, and the loop starts again
+  drawFullSkelevision(t) {
+    const g = this.tvCtx;
+    if (!g) return;
+    const W = 256;
+    const H = 192;
+    const code = this.tvCode;
+    g.fillStyle = '#031208';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) {
+      g.fillStyle = `rgba(157,255,184,${Math.random() * 0.18})`;
+      g.fillRect(Math.random() * W, Math.random() * H, 2, 1 + Math.random() * 2);
+    }
+    const cycle = t % 9;
+    g.textAlign = 'center';
+    g.fillStyle = '#9dffb8';
+    g.font = 'bold 16px monospace';
+    g.fillText('SAFE CODE', W / 2, 30);
+    g.font = 'bold 60px monospace';
+    for (let i = 0; i < code.length; i++) {
+      const x = W / 2 - 96 + i * 64;
+      if (cycle > 1 + i * 1.2) {
+        g.fillStyle = '#9dffb8';
+        g.fillText(code[i], x, 120);
+      } else {
+        g.fillStyle = 'rgba(157,255,184,0.18)';
+        g.fillText('-', x, 120);
+      }
+    }
+    g.font = '12px monospace';
+    g.fillStyle = 'rgba(157,255,184,0.7)';
+    g.fillText(cycle < 8.5 ? 'PLAYBACK' : 'REWIND', W / 2, 176);
+    this.tvTexture.needsUpdate = true;
   }
 
   // Watching the console is only worth the cost when the player is near it
@@ -1084,6 +1208,11 @@ export class World {
 
   // Returns true if any door is still swinging (lets main.js refresh shadows only then)
   update(delta, time) {
+    // Investigation map: redraw the skelevision screen about eight times a second (Quick Run does its own)
+    if (this.constructor === World && this.tvCtx && Math.abs(time - this.tvLast) > 0.12) {
+      this.tvLast = time;
+      this.drawFullSkelevision(time);
+    }
     if (this.particles) {
       const pos = this.particles.geometry.attributes.position.array;
       for (let i = 1; i < pos.length; i += 3) {
