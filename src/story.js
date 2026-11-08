@@ -92,12 +92,29 @@ export const QUICK_INTRO = [
   'YOU ARE HIM NOW. FIND A WAY OUT.\nFOLLOW THE ARROW AT THE TOP OF THE SCREEN.'
 ];
 
+// The quick run, in the order the story is played. Each step has its tutorial line (how to do it) and a
+// short log line from the recording. The checklist on screen shows the same steps.
 const QUICK_OBJECTIVES = [
-  { text: 'Take the rifle from the table [E]', log: 'FOOTAGE: HE DROPPED THE RIFLE RUNNING.', target: { x: -3.65, z: -6.62 }, locationName: 'ENTRANCE' },
-  { text: 'Clear the 2 infected staff in the halls', log: 'FOOTAGE: THEY WERE STAFF ONCE.\nTHEIR BADGES ARE STILL ON.', target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
-  { text: 'Go to the bedroom safe and roll the code [E]', log: 'FOOTAGE: THE SKELEVISION BY THE ENTRANCE SHOWED THE CODE.\nTHE SAFE IS IN THE BEDROOM. THE SHEETS ARE STILL WARM.', target: { x: -14.4, z: 4.6 }, locationName: 'BEDROOM' },
-  { text: 'Put the fuse in the generator [E]', log: 'FOOTAGE: POWER BACK ON SOUTH.\nSOMETHING IS WATCHING THE LIGHTS.', target: { x: -5.85, z: 7.5 }, locationName: 'GENERATOR' },
-  { text: 'Kill Shadow 47, then walk through the portal', log: 'FOOTAGE: THE TAPE ENDS HERE.\nMAKE YOURS END DIFFERENTLY.', target: { x: -3.9, z: 8.3 }, locationName: 'PORTAL' }
+  { text: 'Take the rifle from the table beside the skelevision [E]  (or punch: left-click)',
+    tutorial: 'Walk to the entrance table. Press E on the rifle, or fight with your fists.',
+    log: 'FOOTAGE: HE DROPPED THE RIFLE RUNNING.',
+    target: { x: -3.65, z: -6.62 }, locationName: 'ENTRANCE TABLE' },
+  { text: 'Kill the two infected staff in the west halls',
+    tutorial: 'Shoot (left-click) or punch them. Both must go down before the next step.',
+    log: 'FOOTAGE: THEY WERE STAFF ONCE.\nTHEIR BADGES ARE STILL ON.',
+    target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
+  { text: 'Go to the bedroom safe and roll the code 0 - 4 - 0 - 7 [E]',
+    tutorial: 'The code is on the skelevision by the entrance. At the safe: drag the dial or use the arrow keys, then LOCK each digit.',
+    log: 'FOOTAGE: THE SKELEVISION BY THE ENTRANCE SHOWED THE CODE.\nTHE SAFE IS IN THE BEDROOM. THE SHEETS ARE STILL WARM.',
+    target: { x: -14.4, z: 4.6 }, locationName: 'BEDROOM SAFE' },
+  { text: 'Put the high-voltage fuse in the generator [E]',
+    tutorial: 'The fuse is inside the safe. Take it, then go to the generator in the south room and press E.',
+    log: 'FOOTAGE: POWER BACK ON SOUTH.\nSOMETHING IS WATCHING THE LIGHTS.',
+    target: { x: -5.85, z: 7.5 }, locationName: 'GENERATOR' },
+  { text: 'Kill Shadow 47, then walk through the portal',
+    tutorial: 'Shadow 47 is awake now. Keep your distance, shoot it down, then the airlock opens into a portal. Walk into it.',
+    log: 'FOOTAGE: THE TAPE ENDS HERE.\nMAKE YOURS END DIFFERENTLY.',
+    target: { x: -3.9, z: 8.3 }, locationName: 'PORTAL' }
 ];
 
 export class StoryManager {
@@ -128,6 +145,24 @@ export class StoryManager {
     this.quick = kind === 'quick';
     this.objectives = this.quick ? QUICK_OBJECTIVES : this.fullObjectives;
     this.currentObjectiveIndex = 0;
+    this.sideQuests = { tv: false, cctv: false };
+    this.refreshChecklist();
+  }
+
+  // The on-screen checklist. Quick run only: the steps, a line of how-to for the current one, and the side quests.
+  refreshChecklist() {
+    if (!this.quick) { this.ui.updateChecklist(null); return; }
+    const i = this.currentObjectiveIndex;
+    const steps = this.objectives.map((o, k) => ({
+      label: o.text, state: k < i ? 'done' : k === i ? 'active' : 'todo'
+    }));
+    const tapes = [2, 4].filter(id => this.tapeFound[id]).length;
+    const side = [
+      { label: `VHS footage ${tapes}/2  (pick up both tapes)`, state: tapes === 2 ? 'done' : 'optional' },
+      { label: 'Play a tape on the old TV, west hall  (E at the TV)', state: this.sideQuests.tv ? 'done' : 'optional' },
+      { label: 'Watch the CCTV console feeds, west hall  (E at the console)', state: this.sideQuests.cctv ? 'done' : 'optional' }
+    ];
+    this.ui.updateChecklist({ steps, side, how: this.objectives[i] ? this.objectives[i].tutorial : '' });
   }
 
   getCurrentObjective() {
@@ -146,6 +181,7 @@ export class StoryManager {
     if (index > this.currentObjectiveIndex) {
       this.currentObjectiveIndex = index;
       this.ui.updateObjective(this.getCurrentObjective());
+      this.refreshChecklist();
       const log = this.quick && this.objectives[index] ? this.objectives[index].log + '\n' : '';
       this.ui.showBannerNotification(`${log}${this.getCurrentObjective()}`);
     }

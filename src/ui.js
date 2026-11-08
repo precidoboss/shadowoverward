@@ -243,6 +243,22 @@ export class UIManager {
     document.getElementById('victory-tapes').innerText = `${stats.tapesCount} / 4`;
   }
 
+  // Quick-run checklist: steps (done / current / to do), the how-to for the current step, and the side quests
+  updateChecklist(data) {
+    const el = document.getElementById('quick-checklist');
+    if (!el) return;
+    if (!data) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    const row = (label, state) => `<div class="cl-row cl-${state}"><span class="cl-box">${
+      state === 'done' ? '✔' : state === 'active' ? '▶' : state === 'optional' ? '◇' : '·'}</span>${label}</div>`;
+    el.innerHTML =
+      '<div class="cl-title">STEPS</div>' +
+      data.steps.map(s => row(s.label, s.state)).join('') +
+      (data.how ? `<div class="cl-how">HOW: ${data.how}</div>` : '') +
+      '<div class="cl-title cl-side">SIDE QUESTS</div>' +
+      data.side.map(s => row(s.label, s.state)).join('');
+  }
+
   updateObjective(text) {
     if (this.objectiveText) {
       this.objectiveText.innerText = text;

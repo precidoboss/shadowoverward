@@ -328,6 +328,7 @@ export class LostFootageGame {
     // 1. VHS Tapes
     if (data.type === 'vhs_tape') {
       this.story.collectTape(data.tapeId);
+      this.story.refreshChecklist();
       this.player.inventory.tapes.push({ id: data.tapeId, title: data.title, date: data.date });
       this.ui.showBannerNotification(`TAPE ACQUIRED: ${data.title.toUpperCase()}\nPLAY IT ON THE OLD TV IN THE WEST HALL`);
       target.visible = false;
@@ -454,6 +455,8 @@ export class LostFootageGame {
     // 9c. CCTV console: switch the feed between the cameras
     else if (data.type === 'cctv_console') {
       this.ui.showBannerNotification(`CCTV FEED: ${this.world.cycleCctv()}`);
+      this.story.sideQuests.cctv = true;
+      this.story.refreshChecklist();
     }
 
     // 9a. Old TV in the west hall: plays Shadow 47 footage, once a tape has been picked up
@@ -463,6 +466,7 @@ export class LostFootageGame {
       } else {
         const on = !this.world.tvPlaying;
         if (on) this.enterTvWatch(); else this.exitTvWatch();
+        if (on) { this.story.sideQuests.tv = true; this.story.refreshChecklist(); }
         this.ui.showBannerNotification(on ? 'PLAYING: SHADOW 47 FOOTAGE' : 'TV OFF');
       }
     }
