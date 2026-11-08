@@ -247,6 +247,53 @@ export class UIManager {
     }
   }
 
+  // Loading screen: shown until the investigator, Subject 407 and the infected staff are ready
+  setLoadProgress(fraction, label) {
+    const pct = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+    const fill = document.getElementById('loading-fill');
+    const text = document.getElementById('loading-text');
+    if (fill) fill.style.width = `${pct}%`;
+    if (text) text.innerText = `LOADING ${label}... ${pct}%`;
+  }
+
+  hideLoading() {
+    const screen = document.getElementById('loading-screen');
+    if (screen) screen.classList.add('hidden');
+  }
+
+  // Life bar and the current weapon
+  updateVitals(health, maxHealth, weaponLabel) {
+    const fill = document.getElementById('life-bar-fill');
+    if (fill) {
+      const frac = Math.max(0, health / maxHealth);
+      fill.style.width = `${Math.round(frac * 100)}%`;
+      fill.style.background = frac < 0.3 ? '#ff3333' : '#33dd66';
+    }
+    const weapon = document.getElementById('weapon-status');
+    if (weapon && weaponLabel !== this._weaponLabel) {
+      this._weaponLabel = weaponLabel;
+      weapon.innerText = `WEAPON: ${weaponLabel}`;
+    }
+  }
+
+  // Brief red flash on the vitals when something lands a hit
+  flashHurt() {
+    const panel = document.getElementById('vitals-panel');
+    if (!panel) return;
+    panel.classList.add('hurt');
+    clearTimeout(this._hurtTimer);
+    this._hurtTimer = setTimeout(() => panel.classList.remove('hurt'), 260);
+  }
+
+  // Subject 407's health bar, shown only while it is awake and alive
+  setBossHealth(fraction) {
+    const bar = document.getElementById('boss-bar');
+    const fill = document.getElementById('boss-bar-fill');
+    const show = fraction > 0;
+    if (bar) bar.classList.toggle('hidden', !show);
+    if (fill) fill.style.width = `${Math.round(Math.max(0, fraction) * 100)}%`;
+  }
+
   showBannerNotification(text) {
     if (this.notificationBanner) {
       this.notificationBanner.innerText = text;

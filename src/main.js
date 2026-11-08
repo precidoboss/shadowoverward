@@ -6,6 +6,14 @@ import { VhsShaderEffect } from './vhs-effects.js';
 import { StoryManager } from './story.js';
 import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
+import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
+import { WeaponSystem, createPickup } from './weapons.js';
+import { SpookyLighting } from './spooky-lighting.js';
+import { findFreeSpot } from './collision.js';
+
+// The loading screen stays up at least this long, so the wait reads as deliberate
+const MIN_LOADING_MS = 5000;
+const BOSS_HIT_DAMAGE = 35;
 
 export class LostFootageGame {
   constructor() {
@@ -41,6 +49,8 @@ export class LostFootageGame {
     this._prompt = null;
     this.briefingTimers = [];
     this.lastProximityWarning = -Infinity;
+    this.bossDown = false;
+    this.mutants = [];
 
     // VHS Overlay Shader
     this.vhsEffect = new VhsShaderEffect(this.container);
@@ -52,23 +62,85 @@ export class LostFootageGame {
 
     this.entity = new EntityAI(this.scene, this.player);
     this.entity.world = this.world;
-    // Load Subject 407 after the investigator, so the two downloads do not compete for the same time
-    this.player.rigLoaded.then(() => this.entity.loadRig());
 
     this.ui = new UIManager(this);
     this.story = new StoryManager(this.ui);
+    this.weapons = new WeaponSystem(this);
+    this.spooky = new SpookyLighting(this.world);
+    this.spawnPickups();
 
     // Window Resize Handling
     window.addEventListener('resize', () => this.onWindowResize());
 
+    // Left click punches, or fires the rifle once it is armed. Q switches between them.
+    window.addEventListener('mousedown', (e) => {
+      if (this.state !== 'PLAYING' || !this.player.isLocked || e.button !== 0) return;
+      this.weapons.attack();
+    });
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyQ' && !e.repeat && this.state === 'PLAYING') this.weapons.toggleArmed();
+    });
+
     // Menu Camera Orbit Angle
     this.menuAngle = 0;
+
+    // Load the investigator, then Subject 407, and the infected staff alongside them. The loading screen
+    // stays up until all three are ready.
+    this.startLoading();
 
     // Start Game Loop
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
 
     this.ui.showMainMenu();
+  }
+
+  startLoading() {
+    const started = performance.now();
+    let done = 0;
+    const total = 3;
+    const step = label => {
+      done++;
+      this.ui.setLoadProgress(done / total, label);
+    };
+
+    const investigator = this.player.rigLoaded.then(() => step('INVESTIGATOR'));
+    const subject = investigator
+      .then(() => this.entity.loadRig())
+      .then(() => step('SUBJECT 407'));
+    const staff = loadMutantTemplate()
+      .then(template => {
+        this.spawnMutants(template);
+        step('INFECTED STAFF');
+      })
+      .catch(err => {
+        console.warn('Infected staff model unavailable:', err);
+        step('INFECTED STAFF (UNAVAILABLE)');
+      });
+
+    Promise.all([investigator, subject, staff]).catch(() => {}).then(() => {
+      const wait = Math.max(0, MIN_LOADING_MS - (performance.now() - started));
+      setTimeout(() => this.ui.hideLoading(), wait);
+    });
+  }
+
+  spawnMutants(template) {
+    this.mutants = MUTANT_SPAWNS.map(([x, z]) => new Mutant({
+      scene: this.scene,
+      template,
+      world: this.world,
+      player: this.player,
+      spawn: findFreeSpot(this.world, x, z, 0.35)
+    }));
+  }
+
+  spawnPickups() {
+    const spots = [
+      { type: 'rifle', x: -2.5, z: 16.5 },
+      { type: 'ammo', x: 15.0, z: 4.0 },
+      { type: 'ammo', x: 1.5, z: -24.0 }
+    ];
+    for (const s of spots) createPickup(this, s.type, findFreeSpot(this.world, s.x, s.z, 0.3));
   }
 
   onWindowResize() {
@@ -113,6 +185,8 @@ export class LostFootageGame {
     this.player.pitchObject.rotation.set(0, 0, 0);
     this.player.battery = 100;
     this.player.stamina = 100;
+    this.player.health = this.player.maxHealth;
+    this.player.lastHurt = -10;
     this.player.flashlightOn = true;
     this.player.updateFlashlightState();
     this.player.inventory.keys.clear();
@@ -121,9 +195,13 @@ export class LostFootageGame {
     this.player.inventory.batteriesCount = 0;
     this.player.inventory.notesRead = [];
 
-    // World pickups, doors, safe, generator; and the entity back to dormant
+    // World pickups, doors, safe, generator; the entity, infected staff and weapons back to the start
     this.world.reset();
     this.entity.reset();
+    this.mutants.forEach(m => m.reset());
+    this.weapons.reset();
+    this.spooky.reset();
+    this.bossDown = false;
 
     // Story progress
     this.story.currentObjectiveIndex = 0;
@@ -150,14 +228,6 @@ export class LostFootageGame {
       this.player.inventory.tapes.push({ id: data.tapeId, title: data.title, date: data.date });
       target.visible = false;
       target.userData.isInteractable = false;
-
-      // Awaken the Entity after recovering Tape 01!
-      if (data.tapeId === 1 && !this.entity.isActive) {
-        this.entity.activate();
-        soundEngine.playJumpStinger();
-        this.ui.showBannerNotification("WARNING: SOMETHING IS MOVING IN THE HALLS");
-        this.showStealthBriefing();
-      }
     }
 
     // 2. Door Interaction
@@ -173,6 +243,11 @@ export class LostFootageGame {
           if (!this.story.generatorPowered) {
             soundEngine.playLockedDoor();
             this.ui.showBannerNotification("FIRE EXIT SEALED:\nRESTORE POWER AT GENERATOR BREAKER!");
+            return;
+          }
+          if (!this.bossDown) {
+            soundEngine.playLockedDoor();
+            this.ui.showBannerNotification("FIRE EXIT SEALED:\nSTOP SHADOW 47 FIRST!");
             return;
           }
           // Player escapes!
@@ -238,7 +313,7 @@ export class LostFootageGame {
       }
     }
 
-    // 8. Generator Breaker Box
+    // 8. Generator Breaker Box. Restoring power wakes Subject 407 for the last fight.
     else if (data.type === 'generator') {
       if (!this.player.inventory.hasFuse) {
         soundEngine.playLockedDoor();
@@ -247,9 +322,14 @@ export class LostFootageGame {
         this.story.generatorPowered = true;
         soundEngine.playKeypadBeep(true);
         data.led.material.color.setHex(0x00ff00);
-        this.ui.showBannerNotification("POWER RESTORED TO BASEMENT!\nEMERGENCY FIRE EXIT UNLOCKED");
+        this.ui.showBannerNotification("POWER RESTORED TO BASEMENT!\nSHADOW 47 IS AWAKE");
         this.story.advanceObjective(6);
         soundEngine.playPipeGroan();
+        if (!this.entity.isActive) {
+          this.entity.activate();
+          soundEngine.playJumpStinger();
+          this.showBossBriefing();
+        }
       }
     }
 
@@ -261,20 +341,34 @@ export class LostFootageGame {
         this.ui.toggleInventory();
       }
     }
+
+    // 10. Service rifle and ammunition
+    else if (data.type === 'rifle') {
+      this.weapons.acquireRifle(12);
+      soundEngine.playItemPickup();
+      this.ui.showBannerNotification("RECOVERED: SERVICE RIFLE + 12 ROUNDS\n[Q] SWITCH WEAPON  •  [LEFT CLICK] FIRE");
+      target.visible = false;
+      target.userData.isInteractable = false;
+    } else if (data.type === 'ammo') {
+      this.weapons.addAmmo(10);
+      soundEngine.playItemPickup();
+      this.ui.showBannerNotification(`RIFLE AMMO +10 (${this.weapons.ammo} ROUNDS)`);
+      target.visible = false;
+      target.userData.isInteractable = false;
+    }
   }
 
-  // Directions for avoiding Subject 407, shown in sequence once it wakes.
-  // Every number matches the thresholds in entity.js.
-  showStealthBriefing() {
+  // Directions for the last fight, shown in sequence once Subject 407 wakes.
+  showBossBriefing() {
     this.clearBriefing();
     const lines = [
-      'SUBJECT 407 IS AWAKE. IT CANNOT DETECT YOU FOR 20 SECONDS.',
-      'THEN IT HUNTS BY SOUND AND LIGHT. WALK OR CROUCH [C] TO STAY QUIET.',
-      'FLASHLIGHT OFF [F] NEAR IT. ITS BEAM IS SEEN FROM 12m.',
-      'IT CHASES WITHIN 8m. IF IT REACHES YOU, MOVE AWAY AT ONCE.'
+      'SHADOW 47 IS AWAKE. THIS IS THE LAST FIGHT.',
+      'FISTS DEAL 1 DAMAGE. THE RIFLE DEALS 2 PER SHOT. [Q] SWITCHES.',
+      'IT HITS FOR 35 ONLY IF YOU STAY IN REACH (1.3m) FOR ONE SECOND.',
+      'KILL IT, THEN TAKE THE FIRE EXIT.'
     ];
     lines.forEach((line, i) => {
-      this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 5000 + i * 4800));
+      this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 3000 + i * 4800));
     });
   }
 
@@ -304,6 +398,25 @@ export class LostFootageGame {
         safe.userData.morgueKey.userData.isInteractable = true;
       }
     }
+  }
+
+  // Called when a hit from anything lands on the investigator
+  onHit(amount, message) {
+    const dead = this.player.takeDamage(amount, this.gameTime);
+    this.ui.flashHurt();
+    if (dead) {
+      this.triggerGameOver();
+    } else {
+      this.ui.showBannerNotification(message);
+    }
+  }
+
+  // Shadow 47 is down: the fire exit opens
+  onBossDown() {
+    this.bossDown = true;
+    this.entity.isActive = false;
+    soundEngine.playPipeGroan();
+    this.ui.showBannerNotification("SHADOW 47 IS DOWN.\nTHE FIRE EXIT IS OPEN.");
   }
 
   triggerGameOver() {
@@ -365,6 +478,10 @@ export class LostFootageGame {
       this.setPrompt(`[E] INSERT FUSE / RESTORE POWER`);
     } else if (data.type === 'vcr_station') {
       this.setPrompt(`[E] INSERT TAPE INTO VCR DECK`);
+    } else if (data.type === 'rifle') {
+      this.setPrompt(`[E] PICK UP SERVICE RIFLE`);
+    } else if (data.type === 'ammo') {
+      this.setPrompt(`[E] TAKE RIFLE AMMO`);
     }
   }
 
@@ -418,19 +535,36 @@ export class LostFootageGame {
       this.gameTime += delta;
       this.player.update(delta, this.gameTime);
       const doorsMoving = this.world.update(delta, this.gameTime);
+      this.weapons.update(delta);
 
+      // Subject 407: a landed attack costs health (it does not end the run outright)
       const entityResult = this.entity.update(delta, this.gameTime);
-      if (entityResult === 'CAUGHT') {
-        this.triggerGameOver();
-        return;
+      if (entityResult === 'HIT') {
+        this.onHit(BOSS_HIT_DAMAGE, 'SHADOW 47 HIT YOU!\nMOVE AWAY NOW.');
+        if (this.state !== 'PLAYING') return;
       }
+
+      // Infected staff: each punch that lands costs a little health
+      let chasing = 0;
+      for (const m of this.mutants) {
+        const result = m.update(delta);
+        if (m.aggro && !m.dead) chasing = 0.5;
+        if (result === 'HIT') {
+          this.onHit(ATTACK_DAMAGE, 'INFECTED STAFF HIT YOU!');
+          if (this.state !== 'PLAYING') return;
+        }
+      }
+
+      // Procedural lighting follows how close the danger is
+      const bossTension = this.entity.isActive ? this.entity.proximityDanger : 0;
+      this.spooky.update(delta, Math.max(bossTension, chasing));
 
       this.updateInteractionPrompt();
 
       // Live warning when Subject 407 closes in, at most once every 9 seconds
       if (this.entity.isActive && this.entity.proximityDanger > 0.5 && this.gameTime - this.lastProximityWarning > 9) {
         this.lastProximityWarning = this.gameTime;
-        this.ui.showBannerNotification('SUBJECT 407 IS CLOSE!\nCROUCH [C] + FLASHLIGHT OFF [F] + MOVE AWAY');
+        this.ui.showBannerNotification('SHADOW 47 IS CLOSE!\nCROUCH [C] + FLASHLIGHT OFF [F] + MOVE AWAY');
       }
 
       // HUD at 20 Hz is plenty for a timer and a compass
@@ -445,6 +579,8 @@ export class LostFootageGame {
           this.player.yawObject.position,
           this.player.yawObject.rotation.y
         );
+        this.ui.updateVitals(this.player.health, this.player.maxHealth, this.weapons.label);
+        this.ui.setBossHealth(this.entity.isActive ? this.entity.health / this.entity.maxHealth : 0);
       }
 
       this.refreshShadows(doorsMoving);

@@ -37,6 +37,7 @@ export class World {
     this.colliders = [];
     this.interactables = [];
     this.doors = [];
+    this.lightMood = 1;        // set by SpookyLighting: scales every stuttering light
     this.flickerLights = [];   // point/spot lights that stutter (base intensity stored in userData)
     this.fixtures = [];        // emissive ceiling panels that stutter
     this.wallBuckets = new Map();
@@ -938,7 +939,7 @@ export class World {
         d.dip -= delta;
         light.intensity = d.base * 0.15;
       } else {
-        light.intensity = d.base * (0.93 + Math.random() * 0.07);
+        light.intensity = d.base * this.lightMood * (0.93 + Math.random() * 0.07);
         if (Math.random() < delta * 0.45) d.dip = 0.05 + Math.random() * 0.14;
       }
     }
@@ -980,7 +981,7 @@ export class World {
   reset() {
     this.interactables.forEach(obj => {
       const d = obj.userData || {};
-      if (['vhs_tape', 'key', 'battery', 'fuse'].includes(d.type)) {
+      if (['vhs_tape', 'key', 'battery', 'fuse', 'rifle', 'ammo'].includes(d.type)) {
         obj.visible = true;
         d.isInteractable = true;
       }

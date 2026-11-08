@@ -811,3 +811,70 @@ canvas {
   transition: transform 0.12s linear;
 }
 .objective-arrow svg { display: block; filter: drop-shadow(0 0 6px #ffcc00); }
+
+/* ---------- Loading screen ---------- */
+#loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #05080a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #bfe9c8;
+  font-family: 'VT323', monospace;
+}
+#loading-screen.hidden { display: none; }
+.loading-title { font-size: 46px; letter-spacing: 2px; color: #7dff9e; }
+.loading-sub { font-size: 22px; opacity: 0.7; }
+.loading-bar-bg {
+  width: min(420px, 80vw);
+  height: 14px;
+  border: 1px solid #2f6b40;
+  background: #0b150e;
+}
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: #33dd66;
+  transition: width 0.3s ease;
+}
+.loading-text { font-size: 20px; }
+.loading-note { font-size: 16px; opacity: 0.5; }
+
+/* ---------- Life bar, weapon and boss health ---------- */
+.vitals-panel {
+  position: absolute;
+  left: 24px;
+  top: 190px;
+  width: min(300px, 60vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: 'VT323', monospace;
+  color: #d7ffe0;
+  pointer-events: none;
+  transition: filter 0.1s;
+}
+.vitals-panel.hurt { filter: brightness(1.8) hue-rotate(-30deg); }
+.vitals-row { display: flex; align-items: center; gap: 10px; }
+.vitals-label { font-size: 20px; min-width: 88px; text-shadow: 0 0 6px #000; }
+.vitals-label.boss { color: #ff7755; }
+.vitals-bar-bg {
+  flex: 1;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(180, 255, 200, 0.5);
+}
+.vitals-bar-bg.boss { border-color: rgba(255, 120, 90, 0.7); }
+.vitals-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: #33dd66;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+.vitals-bar-fill.boss { background: #ff5533; }
+.weapon-status { font-size: 20px; text-align: center; text-shadow: 0 0 6px #000; }
+.boss-bar.hidden { display: none; }

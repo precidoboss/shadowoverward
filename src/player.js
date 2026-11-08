@@ -66,6 +66,10 @@ export class Player {
     // Flashlight & Battery
     this.flashlightOn = true;
     this.battery = 100;
+    this.health = 100;
+    this.maxHealth = 100;
+    this.lastHurt = -10;
+    this.armed = false;
     this.batteryDrainRate = 0.6;
     this.entityProximityFlicker = false;
 
@@ -324,7 +328,10 @@ export class Player {
         crouchDown: 'animations/clips/crouchDown.json',
         crouchIdle: 'animations/clips/crouchIdle.json',
         crouchWalk: 'animations/clips/crouchWalk.json',
-        standUp: 'animations/clips/standUp.json'
+        standUp: 'animations/clips/standUp.json',
+        punch: 'animations/clips/punch.json',
+        rifleAim: 'animations/clips/rifleAim.json',
+        rifleFire: 'animations/clips/rifleFire.json'
       },
       height: 1.75,
       // Mixamo models face +z; the game's forward is -z, so turn the body to face away from the camera
@@ -346,20 +353,41 @@ export class Player {
   // Chooses the clip for the investigator's current state. Crouching plays a one-shot dip and rise between stances.
   updateRigPose(isMoving) {
     const crouch = this.isCrouching;
+    // A punch or a shot plays to its end before the locomotion pose takes over again
+    if (this.rig.current === 'punch' || this.rig.current === 'rifleFire') {
+      this.wasCrouching = crouch;
+      return;
+    }
     // Playback rate matches the clip's real travel speed to the player's speed, so the feet do not slide
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
     const rate = key => (this.rig.speeds[key] ? THREE.MathUtils.clamp(speed / this.rig.speeds[key], 0.3, 3) : 1);
+    const idle = this.armed ? 'rifleAim' : 'idle';
     if (crouch && !this.wasCrouching) {
       this.rig.play('crouchDown', { once: true, then: 'crouchIdle', fade: 0.2 });
     } else if (!crouch && this.wasCrouching) {
       this.rig.play('standUp', { once: true, then: 'idle', fade: 0.2 });
     } else if (this.rig.current !== 'crouchDown' && this.rig.current !== 'standUp') {
       if (crouch) this.rig.play(isMoving ? 'crouchWalk' : 'crouchIdle', { timeScale: isMoving ? rate('crouchWalk') : 1 });
-      else if (!isMoving) this.rig.play('idle');
+      else if (!isMoving) this.rig.play(idle);
       else if (this.isSprinting) this.rig.play('run', { timeScale: rate('run') });
       else this.rig.play('walk', { timeScale: rate('walk') });
     }
     this.wasCrouching = crouch;
+  }
+
+  playPunch() {
+    if (this.rig) this.rig.play('punch', { once: true, then: 'idle', fade: 0.08 });
+  }
+
+  playFire() {
+    if (this.rig) this.rig.play('rifleFire', { once: true, then: 'rifleAim', fade: 0.06 });
+  }
+
+  // Returns true when this hit leaves the investigator with no health
+  takeDamage(amount, time) {
+    this.health = Math.max(0, this.health - amount);
+    this.lastHurt = time;
+    return this.health <= 0;
   }
 
   animateCharacter(delta, isMoving) {
@@ -703,6 +731,11 @@ export class Player {
     }
 
     this.animTime += delta;
+
+    // Health comes back slowly once the investigator has been out of harm's way for a few seconds
+    if (this.health < this.maxHealth && time - this.lastHurt > 5) {
+      this.health = Math.min(this.maxHealth, this.health + 5 * delta);
+    }
 
     // Smooth optical zoom FOV
     const targetFov = this.isZoomed ? this.zoomFov : this.normalFov;

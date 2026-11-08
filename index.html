@@ -7,6 +7,13 @@
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
+  <div id="loading-screen">
+    <div class="loading-title">SHADOW OVER WARD B</div>
+    <div class="loading-sub">REWINDING FOOTAGE...</div>
+    <div class="loading-bar-bg"><div id="loading-fill" class="loading-bar-fill"></div></div>
+    <div id="loading-text" class="loading-text">LOADING...</div>
+    <div class="loading-note">The investigator, Subject 407 and the infected staff are loading.</div>
+  </div>
   <div id="game-container">
     <!-- 3D WebGL Canvas is injected here -->
 
@@ -48,6 +55,13 @@
 
       <!-- Reticle and Prompts -->
       <div id="crosshair"></div>
+      <div id="vitals-panel" class="vitals-panel">
+        <div class="vitals-row"><span class="vitals-label">LIFE</span><div class="vitals-bar-bg"><div id="life-bar-fill" class="vitals-bar-fill"></div></div></div>
+        <div id="weapon-status" class="weapon-status">WEAPON: FISTS</div>
+        <div id="boss-bar" class="boss-bar hidden">
+          <div class="vitals-row"><span class="vitals-label boss">SHADOW 47</span><div class="vitals-bar-bg boss"><div id="boss-bar-fill" class="vitals-bar-fill boss"></div></div></div>
+        </div>
+      </div>
       <div id="interaction-prompt" class="hidden">[E] TAKE TAPE</div>
       <div id="notification-banner"></div>
 
@@ -60,6 +74,8 @@
           <span>[C]</span><span>Crouch (quiet)</span>
           <span>[F]</span><span>Flashlight (407 sees it)</span>
           <span>[E]</span><span>Pick up / open / read</span>
+          <span>[LMB]</span><span>Punch / fire rifle</span>
+          <span>[Q]</span><span>Switch fists / rifle</span>
           <span>[V]</span><span>1st / 3rd person</span>
           <span>[M]</span><span>Map</span>
           <span>[TAB]</span><span>Bag and VCR</span>

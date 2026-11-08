@@ -44,10 +44,14 @@ export class EntityAI {
     this.proximityDanger = 0; // 0 to 1
     this.spottedTimer = 0;
     // After it wakes, it patrols for this many seconds and cannot detect the player
-    this.graceTime = 20;
+    this.graceTime = 12;
     this.grace = 0;
     this.grabTimer = 0;
     this.stuck = 0;
+    // Boss health. It is only hurt by the rifle and fists, and it stays down once killed.
+    this.maxHealth = 10;
+    this.health = this.maxHealth;
+    this.attackCooldown = 0;
 
     // Scratch vectors (no per-frame allocations)
     this._targetPos = new THREE.Vector3();
@@ -142,6 +146,18 @@ export class EntityAI {
     this.grace = 0;
     this.grabTimer = 0;
     this.stuck = 0;
+    this.attackCooldown = 0;
+  }
+
+  // Returns true when this hit kills it
+  takeHit(amount) {
+    if (this.health <= 0) return false;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health > 0) return false;
+    this.isActive = false;
+    this.state = 'PATROL';
+    this.mesh.visible = false;
+    return true;
   }
 
   // Restore the dormant state for a new run
@@ -158,6 +174,8 @@ export class EntityAI {
     this.grace = 0;
     this.grabTimer = 0;
     this.stuck = 0;
+    this.health = this.maxHealth;
+    this.attackCooldown = 0;
     this.player.entityProximityFlicker = false;
   }
 
@@ -189,7 +207,7 @@ export class EntityAI {
     const playerSpotted = awake && (distToPlayer < hearingDist || canSee);
 
     if (playerSpotted) {
-      this.state = distToPlayer < 8.0 ? 'CHASE' : 'STALK';
+      this.state = distToPlayer < 6.5 ? 'CHASE' : 'STALK';
       this.spottedTimer = 0;
     } else if (this.state === 'CHASE' || this.state === 'STALK') {
       this.spottedTimer += delta;
@@ -246,10 +264,16 @@ export class EntityAI {
 
     this.animate(delta, speedNow);
 
-    // Catch check: it must be hunting and stay in reach briefly, so the player can still slip away
-    if (this.state === 'CHASE' && distToPlayer < 1.15) {
+    // Attack check: it must be hunting and stay in reach for a moment, so the player can still slip away.
+    // A landed attack costs health and then it cools down, so the player can back off and fight.
+    this.attackCooldown = Math.max(0, this.attackCooldown - delta);
+    if (this.state === 'CHASE' && distToPlayer < 1.3 && this.attackCooldown <= 0) {
       this.grabTimer += delta;
-      if (this.grabTimer > 0.6) return 'CAUGHT';
+      if (this.grabTimer > 0.9) {
+        this.grabTimer = 0;
+        this.attackCooldown = 2.8;
+        return 'HIT';
+      }
     } else {
       this.grabTimer = 0;
     }
