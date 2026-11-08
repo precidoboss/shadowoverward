@@ -176,28 +176,23 @@
       </div>
     </div>
 
-    <!-- SAFE KEYPAD MODAL -->
+    <!-- SAFE DIAL MODAL: the combination is rolled on a dial -->
     <div id="safe-keypad-modal" class="modal-overlay hidden">
-      <div class="retro-panel" style="max-width: 420px;">
-        <h2 class="retro-title">WALL VAULT KEYPAD</h2>
-        <div class="keypad-container">
-          <div id="keypad-display">____</div>
-          <div class="keypad-grid">
-            <button class="keypad-btn" data-val="1">1</button>
-            <button class="keypad-btn" data-val="2">2</button>
-            <button class="keypad-btn" data-val="3">3</button>
-            <button class="keypad-btn" data-val="4">4</button>
-            <button class="keypad-btn" data-val="5">5</button>
-            <button class="keypad-btn" data-val="6">6</button>
-            <button class="keypad-btn" data-val="7">7</button>
-            <button class="keypad-btn" data-val="8">8</button>
-            <button class="keypad-btn" data-val="9">9</button>
-            <button class="keypad-btn action-btn" data-val="C">CLR</button>
-            <button class="keypad-btn" data-val="0">0</button>
-            <button class="keypad-btn submit-btn" data-val="E">ENT</button>
-          </div>
+      <div class="retro-panel" style="max-width: 460px;">
+        <h2 class="retro-title">WALL VAULT</h2>
+        <p class="dial-hint">Drag the dial, use the mouse wheel or the arrow keys. LOCK sets each digit.</p>
+        <div class="dial-wrap">
+          <div class="dial-pointer"></div>
+          <div id="dial-ring" class="dial-ring"></div>
+          <div id="dial-face" class="dial-face"></div>
         </div>
-        <button id="btn-close-keypad" class="retro-btn" style="margin-top: 24px;">CANCEL / EXIT</button>
+        <div id="dial-readout" class="dial-readout">DIGIT 0</div>
+        <div id="dial-slots" class="dial-slots"><span>_</span><span>_</span><span>_</span><span>_</span></div>
+        <div class="dial-actions">
+          <button id="btn-dial-lock" class="retro-btn">LOCK DIGIT</button>
+          <button id="btn-dial-clear" class="retro-btn">CLEAR</button>
+        </div>
+        <button id="btn-close-keypad" class="retro-btn" style="margin-top: 18px;">CANCEL / EXIT</button>
       </div>
     </div>
 

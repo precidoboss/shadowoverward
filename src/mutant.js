@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
 import { moveWithWalls } from './collision.js';
+import { soundEngine } from './audio.js';
 
 // Where the infected staff start. Each spot is nudged to open floor at spawn time.
 export const MUTANT_SPAWNS = [[6, 12], [-6, 14], [-2, -2], [14, -2], [-14, -20]];
@@ -40,6 +41,9 @@ export function loadMutantTemplate() {
 
 // A small enemy: it shambles until the investigator is near, then chases and punches.
 // Update returns 'HIT' on the frame its punch lands, so the game applies the damage.
+// Within this distance (metres) the infected are audible: they moan, shriek and groan
+const MOAN_RANGE = 16;
+
 export class Mutant {
   constructor({ scene, template, world, player, spawn }) {
     this.world = world;
@@ -66,6 +70,7 @@ export class Mutant {
     this.attackTimer = -1;
     this.attackHit = false;
     this._dir = new THREE.Vector3();
+    this.moanTimer = Math.random() * 3;
   }
 
   get position() { return this.group.position; }
@@ -84,9 +89,19 @@ export class Mutant {
     const dz = p.z - pos.z;
     const dist = Math.hypot(dx, dz);
 
+    const wasAggro = this.aggro;
     if (!this.aggro && dist < CHASE_RANGE) this.aggro = true;
     else if (this.aggro && dist > LOSE_RANGE) this.aggro = false;
     this.cooldown = Math.max(0, this.cooldown - delta);
+
+    // Sound: a shriek when it notices you, then moans that come faster while it chases
+    const loud = THREE.MathUtils.clamp(1 - dist / MOAN_RANGE, 0.1, 1);
+    if (this.aggro && !wasAggro && dist < MOAN_RANGE) soundEngine.playInfectedShriek(loud);
+    this.moanTimer -= delta;
+    if (this.moanTimer <= 0 && dist < MOAN_RANGE) {
+      soundEngine.playInfectedGroan(loud * 0.8);
+      this.moanTimer = this.aggro ? 1.6 + Math.random() * 1.4 : 4 + Math.random() * 5;
+    }
 
     let result = null;
     if (this.attackTimer >= 0) {
@@ -103,6 +118,7 @@ export class Mutant {
       this.attackTimer = 0;
       this.attackHit = false;
       this.cooldown = ATTACK_COOLDOWN;
+      soundEngine.playInfectedShriek(1);
       this.rig.play('attack', { once: true, then: 'walk', fade: 0.1, timeScale: ATTACK_TIMESCALE });
     }
 
@@ -133,6 +149,7 @@ export class Mutant {
     if (this.health > 0) return false;
     this.dead = true;
     this.aggro = false;
+    soundEngine.playInfectedGroan(0.8);
     this.attackTimer = -1;
     this.rig.play('die', { once: true, fade: 0.1 });
     return true;

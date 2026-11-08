@@ -8,7 +8,7 @@ import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
 import { QUICK_INTRO } from './story.js';
-import { QuickWorld, preloadQuickModels, TV_CODE } from './quick-world.js';
+import { QuickWorld, preloadQuickModels, TV_CODE, RIFLE_SPOT } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
@@ -220,9 +220,13 @@ export class LostFootageGame {
 
   spawnPickups() {
     const spots = this.levelKind === 'quick'
-      ? [{ type: 'rifle', x: -4.5, z: -4.5 }, { type: 'ammo', x: -9, z: -2.1 }]   // the fuse is inside the bedroom safe
+      ? [{ type: 'rifle', ...RIFLE_SPOT }, { type: 'ammo', x: -9, z: -2.1 }]   // the fuse is inside the bedroom safe
       : [{ type: 'rifle', x: -2.5, z: 16.5 }, { type: 'ammo', x: 15.0, z: 4.0 }, { type: 'ammo', x: 1.5, z: -24.0 }];
-    for (const s of spots) createPickup(this, s.type, findFreeSpot(this.world, s.x, s.z, 0.3));
+    for (const s of spots) {
+      // Pickups with a fixed height (the rifle on the table) keep their exact spot
+      const at = s.y !== undefined ? { x: s.x, y: s.y, z: s.z } : findFreeSpot(this.world, s.x, s.z, 0.3);
+      createPickup(this, s.type, at);
+    }
   }
 
   onWindowResize() {
@@ -347,7 +351,12 @@ export class LostFootageGame {
             this.ui.showBannerNotification("FIRE EXIT SEALED:\nSTOP SHADOW 47 FIRST!");
             return;
           }
-          // Player escapes!
+          // Quick run: the exit opens a portal, and walking into it is the way out (see the portal check)
+          if (this.levelKind === 'quick') {
+            this.ui.showBannerNotification("THE PORTAL IS OPEN.\nWALK INTO IT TO ESCAPE.");
+            return;
+          }
+          // Sanatorium: the fire exit is the way out
           this.triggerVictory();
           return;
         } else if (!this.player.inventory.keys.has(data.reqKey)) {
@@ -461,6 +470,12 @@ export class LostFootageGame {
     }
   }
 
+  // The rolled combination turns the brass dial on the safe
+  turnSafeDial(digit) {
+    const safe = this.world.vaultSafe;
+    if (safe && safe.userData.dial) safe.userData.dial.rotation.z = -digit * Math.PI / 5;
+  }
+
   // Directions for the last fight, shown in sequence once Subject 407 wakes.
   showBossBriefing() {
     this.clearBriefing();
@@ -482,7 +497,7 @@ export class LostFootageGame {
     const safe = this.world.vaultSafe;
     if (safe && safe.userData) {
       safe.userData.isOpen = true;
-      safe.userData.ledMesh.material.color.setHex(0x33ff55);
+      if (safe.userData.ledMesh) safe.userData.ledMesh.material.color.setHex(0x33ff55);
       if (safe.userData.doorPivot) {
         safe.userData.doorPivot.rotation.y = -Math.PI / 1.7;
       }
@@ -644,6 +659,12 @@ export class LostFootageGame {
     if (this.state === 'PLAYING') {
       this.gameTime += delta;
       this.player.update(delta, this.gameTime);
+      // Quick run: stepping into the open portal is the way out
+      if (this.levelKind === 'quick' && this.world.isInPortal
+          && this.world.isInPortal(this.player.yawObject.position.x, this.player.yawObject.position.z)) {
+        this.triggerVictory();
+        return;
+      }
       const doorsMoving = this.world.update(delta, this.gameTime);
       this.weapons.update(delta);
 

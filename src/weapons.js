@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { modelFactory } from './models.js';
-import { loadGLB, tidy, sizeHeight, standOn } from './props.js';
+import { loadGLB, tidy, sizeHeight, sizeLongest, standOn, centreInside } from './props.js';
 import { soundEngine } from './audio.js';
 import { CombatFX, haptic } from './effects.js';
 
@@ -25,62 +25,18 @@ const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0
 // but no rifle mesh, so the gun is built from boxes and cylinders: receiver, rail optic, ribbed
 // handguard, barrel with muzzle brake, curved magazine, pistol grip and stock.
 // With hands = true the gunner's gloves and sleeves are added too (first-person view only).
-export function buildRifleMesh(hands = false) {
+// The service rifle: the uploaded cartoon rifle. Its barrel points along -Z with Y up, the usual forward.
+// Hands and third-person views centre it on the group. A pickup stands on `bottomY` (a table, or the floor).
+export function buildRifleMesh(hands = false, { length = hands ? 0.55 : 0.85, bottomY = null } = {}) {
   const g = new THREE.Group();
-  const box = (w, h, d, mat, x, y, z, rx = 0, ry = 0) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-    m.position.set(x, y, z);
-    m.rotation.set(rx, ry, 0);
-    m.castShadow = !hands;
-    g.add(m);
-    return m;
-  };
-  const tube = (r, len, mat, x, y, z) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), mat);
-    m.rotation.x = Math.PI / 2;
-    m.position.set(x, y, z);
-    m.castShadow = !hands;
-    g.add(m);
-    return m;
-  };
-  box(0.05, 0.085, 0.24, gunMetal, 0, -0.005, 0.0);                 // lower receiver
-  box(0.056, 0.06, 0.3, gunMetal, 0, 0.05, -0.02);                  // upper receiver
-  box(0.03, 0.012, 0.3, gunMetal, 0, 0.088, -0.02);                 // top rail
-  box(0.042, 0.042, 0.13, gunPoly, 0, 0.115, -0.05);                // optic body
-  tube(0.017, 0.03, gunLens, 0, 0.115, -0.125);                     // optic lens
-  box(0.064, 0.064, 0.27, gunPoly, 0, 0.03, -0.285);                // handguard
-  for (let i = 0; i < 4; i++) box(0.068, 0.012, 0.02, gunMetal, 0, 0.03, -0.2 - i * 0.055); // handguard ribs
-  tube(0.0115, 0.3, gunMetal, 0, 0.04, -0.58);                      // barrel
-  tube(0.017, 0.07, gunMetal, 0, 0.04, -0.75);                      // muzzle brake
-  box(0.008, 0.05, 0.008, gunMetal, 0, 0.075, -0.68);               // front sight
-  box(0.046, 0.1, 0.19, gunPoly, 0, -0.012, 0.24);                  // stock
-  box(0.052, 0.115, 0.025, gunMetal, 0, -0.012, 0.345);             // butt pad
-  box(0.036, 0.1, 0.05, gunPoly, 0, -0.085, 0.085, -0.35);          // pistol grip
-  box(0.036, 0.14, 0.06, gunMetal, 0, -0.115, -0.065, 0.16);        // magazine
-  box(0.022, 0.02, 0.1, gunMetal, 0, -0.058, 0.02);                 // trigger guard
-
-  if (hands) {
-    // Right hand on the grip, forearm back toward the shoulder
-    box(0.058, 0.06, 0.09, gloveMat, 0.0, -0.1, 0.085);
-    box(0.066, 0.066, 0.34, sleeveMat, 0.045, -0.19, 0.3, -0.3);
-    // Left hand cupped under the handguard, forearm angled back to the left
-    box(0.07, 0.056, 0.11, gloveMat, 0.0, -0.012, -0.27);
-    box(0.066, 0.066, 0.42, sleeveMat, -0.1, -0.15, -0.06, -0.15, -0.38);
-    g.traverse(o => {
-      // The view model is drawn on top of the world so it never sinks into a wall
-      if (o.isMesh) {
-        o.material = o.material.clone();
-        o.material.depthTest = false;
-        o.renderOrder = 1000;
-      }
-    });
-  }
-
-  const flash = modelFactory.makeGlow(0xffcc66, 0.3);
-  flash.position.set(0, 0.04, -0.82);
-  flash.visible = false;
-  g.add(flash);
-  g.userData.flash = flash;
+  loadGLB('models/rifle.glb').then(gltf => {
+    const model = tidy(gltf.scene.clone(true));
+    model.traverse(o => { if (o.isMesh) o.castShadow = !hands; });
+    g.add(model);
+    sizeLongest(model, length);
+    if (bottomY !== null) standOn(g, g.position.x, bottomY, g.position.z, model);
+    else centreInside(g, model);
+  }).catch(err => console.warn('Rifle model failed to load', err));
   return g;
 }
 
@@ -103,7 +59,7 @@ function buildAmmoBox() {
 // Places a rifle, ammo or fuse pickup on the floor. It is an interactable, so [E] picks it up.
 export function createPickup(game, type, spot) {
   let group;
-  if (type === 'rifle') group = buildRifleMesh();
+  if (type === 'rifle') group = buildRifleMesh(false, { length: 0.75, bottomY: spot.y ?? 0 });
   else if (type === 'fuse') {
     group = new THREE.Group();
     const fuse = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.08), fuseMat);
@@ -112,7 +68,7 @@ export function createPickup(game, type, spot) {
   } else group = buildAmmoBox();
   if (type === 'rifle') {
     group.rotation.set(0, 0.6, 0);
-    group.position.set(spot.x, 0.07, spot.z);
+    group.position.set(spot.x, spot.y ?? 0, spot.z);
   } else {
     group.position.set(spot.x, 0, spot.z);
   }

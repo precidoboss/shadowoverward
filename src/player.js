@@ -577,7 +577,7 @@ export class Player {
       return;
     }
 
-    const desiredLocal = this._camDesired.set(0.65, 0.25, 2.3);
+    const desiredLocal = this._camDesired.set(0, 0.3, 2.4);
     this.eyeContainer.updateWorldMatrix(true, false);
     const m = this.eyeContainer.matrixWorld;
     const pivot = this._camPivot.setFromMatrixPosition(m);
@@ -638,7 +638,7 @@ export class Player {
       this.charHead.visible = false;
       this.characterGroup.visible = !this.hasAnimatedCharacter();
     } else {
-      this.camera.position.set(0.65, 0.25, 2.3);
+      this.camera.position.set(0, 0.3, 2.4);
       this.fpsEquip.visible = false;
       this.charHead.visible = true;
       this.characterGroup.visible = !this.hasAnimatedCharacter();

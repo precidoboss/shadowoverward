@@ -895,3 +895,33 @@ canvas {
 #crosshair.kick { transform: translate(-50%, -50%) scale(1.5); }
 
 .guide-grid .guide-head { color: #66ff88 !important; font-size: 11px; letter-spacing: 2px; margin-top: 6px; border-bottom: 1px solid rgba(102,255,136,0.25); }
+
+
+/* Safe dial: the combination is rolled, not typed */
+.dial-hint { color: #9dffb8; font-family: monospace; font-size: 13px; text-align: center; margin: 0 0 8px; }
+.dial-wrap { position: relative; width: 260px; height: 260px; margin: 12px auto; }
+.dial-ring { position: absolute; inset: 0; transition: transform 0.12s ease-out; }
+.dial-num {
+  position: absolute; left: 50%; top: 50%; width: 30px; margin-left: -15px; margin-top: -13px;
+  text-align: center; font-family: monospace; font-size: 22px; color: #33ff55;
+}
+.dial-face {
+  position: absolute; left: 50%; top: 50%; width: 140px; height: 140px; margin: -70px 0 0 -70px;
+  border-radius: 50%; border: 3px solid #33ff55; cursor: grab; touch-action: none;
+  background: radial-gradient(circle at 35% 30%, #3a4a3e, #0d140f 70%);
+  z-index: 1;
+}
+.dial-face:active { cursor: grabbing; }
+.dial-pointer {
+  position: absolute; left: 50%; top: -4px; transform: translateX(-50%); z-index: 2;
+  width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent;
+  border-top: 20px solid #ff3333;
+}
+.dial-readout { font-family: monospace; font-size: 26px; color: #33ff55; text-align: center; margin: 4px 0; }
+.dial-slots { display: flex; justify-content: center; gap: 12px; margin: 10px 0; }
+.dial-slots span {
+  width: 44px; height: 56px; border: 2px solid #33ff55; background: #06100a;
+  font-family: monospace; font-size: 34px; color: #22ee55;
+  display: flex; align-items: center; justify-content: center;
+}
+.dial-actions { display: flex; gap: 12px; justify-content: center; }

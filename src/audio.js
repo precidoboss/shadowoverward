@@ -242,6 +242,83 @@ export class SoundEngine {
     });
   }
 
+  // Infected groan: a low, wet moan with a rattle in the throat. Every call varies a little.
+  playInfectedGroan(volume = 0.5) {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const dur = 1.6 + Math.random() * 0.8;
+    const base = 80 + Math.random() * 40;
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(base, t);
+    osc.frequency.linearRampToValueAtTime(base * 0.7, t + dur);
+    const wobble = this.ctx.createOscillator();
+    wobble.frequency.value = 5 + Math.random() * 4;
+    const wobbleAmt = this.ctx.createGain();
+    wobbleAmt.gain.value = 6;
+    wobble.connect(wobbleAmt);
+    wobbleAmt.connect(osc.frequency);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(420, t);
+    lp.frequency.linearRampToValueAtTime(260, t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5 * volume, t + 0.25);
+    g.gain.setValueAtTime(0.5 * volume, t + dur * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(lp);
+    lp.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    wobble.start(t);
+    osc.stop(t + dur + 0.05);
+    wobble.stop(t + dur + 0.05);
+
+    // Breath through the throat on top of the moan
+    const n = this._noise(dur);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 2.5;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(0.25 * volume, t + 0.2);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(bp);
+    bp.connect(ng);
+    ng.connect(this.masterGain);
+    n.start(t);
+    n.stop(t + dur);
+  }
+
+  // Infected shriek: a rough scream that rises, then falls away
+  playInfectedShriek(volume = 0.6) {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(380, t);
+    osc.frequency.linearRampToValueAtTime(720, t + 0.25);
+    osc.frequency.exponentialRampToValueAtTime(260, t + 0.9);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1200;
+    bp.Q.value = 1.2;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.4 * volume, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+    osc.connect(bp);
+    bp.connect(g);
+    g.connect(this.masterGain);
+    osc.start(t);
+    osc.stop(t + 1.0);
+  }
+
   // A slow breath close behind you
   playBreath() {
     if (!this.ctx) return;

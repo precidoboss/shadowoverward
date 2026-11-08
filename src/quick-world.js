@@ -21,9 +21,33 @@ export const TV_CODE = '0407';
 
 // Fixed positions, checked against the walls so nothing blocks the route
 export const TABLE = { x: -3.95, z: -6.62 };          // autopsy table at the entrance
-export const SAFE = { x: -15.3, y: 1.2, z: 4.6 };     // bedroom safe, on the west wall
+export const SAFE = { x: -15.04, y: 1.2, z: 4.6 };    // bedroom safe, against the west wall
 export const GENERATOR = { x: -5.85, z: 7.5 };
 export const EXIT = { x: -3.9, z: 8.3 };              // airlock, on the back wall of the generator room
+// The service rifle lies on the autopsy table, beside the skelevision
+export const RIFLE_SPOT = { x: TABLE.x + 0.3, y: 0.99, z: TABLE.z };
+
+// The portal swirls once the airlock is open. Both shaders are plain GLSL.
+const PORTAL_VERT = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }`;
+const PORTAL_FRAG = `
+  uniform float uTime;
+  varying vec2 vUv;
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    float swirl = a + r * 5.0 - uTime * 2.2;
+    float band = 0.5 + 0.5 * sin(swirl * 4.0);
+    float edge = smoothstep(1.0, 0.55, r);
+    vec3 col = mix(vec3(0.05, 0.85, 0.45), vec3(0.75, 1.0, 0.85), band);
+    float alpha = edge * (0.35 + 0.65 * band);
+    gl_FragColor = vec4(col * alpha, alpha);
+  }`;
 
 const MODELS = [
   'models/corridor.glb', 'models/bed.glb', 'models/autopsy_table.glb', 'models/skelevision.glb',
@@ -193,26 +217,81 @@ export class QuickWorld extends World {
     this.tvTexture.needsUpdate = true;
   }
 
-  // ---------- Bedroom: the safe with the fuse inside ----------
+  // ---------- Bedroom: the uploaded safe, with the fuse inside ----------
   buildBedroomSafe() {
-    const safe = modelFactory.createWallSafe();
-    safe.position.set(SAFE.x, SAFE.y, SAFE.z);
-    safe.rotation.y = Math.PI / 2;   // the door faces east, into the bedroom
+    // The holder is an interactable straight away; the safe model fills it in once it has loaded
+    const safe = makeHolder();
+    safe.userData = {
+      isInteractable: true, type: 'wall_safe', isOpen: false,
+      ledMesh: null, doorPivot: null, dial: null, interiorLight: new THREE.Object3D()
+    };
     this.scene.add(safe);
     this.interactables.push(safe);
     this.vaultSafe = safe;
-    this.addCollider(SAFE.x, SAFE.y, SAFE.z, 0.4, 0.8, 0.8);
+    this.addCollider(SAFE.x, SAFE.y, SAFE.z, 0.92, 0.8, 0.8);
 
-    // The fuse lives in the safe: hidden until the code opens it, then it can be taken
-    safe.updateWorldMatrix(true, false);
+    // The fuse is inside the safe: hidden until the dial opens it, then it can be taken
     const fuse = buildHighVoltageFuse();
-    fuse.position.copy(new THREE.Vector3(0, -0.05, 0.3).applyMatrix4(safe.matrixWorld));
-    fuse.rotation.y = safe.rotation.y;
+    fuse.position.set(SAFE.x + 0.62, SAFE.y - 0.05, SAFE.z);
+    fuse.rotation.y = Math.PI / 2;
     fuse.visible = false;
     fuse.userData = { isInteractable: false, type: 'fuse', name: 'High-Voltage Fuse' };
     this.scene.add(fuse);
     this.interactables.push(fuse);
     safe.userData.fuse = fuse;
+
+    loadGLB('models/safe.glb').then(gltf => {
+      const closed = gltf.scene.getObjectByName('Safe_Closed');
+      if (!closed) throw new Error('Safe_Closed not found in safe.glb');
+      const model = tidy(closed.clone(true));
+      model.updateWorldMatrix(true, true);
+
+      // The door is the plate whose front face is furthest forward (+Z). It hinges on its left edge.
+      let door = null;
+      let frontMost = -Infinity;
+      model.traverse(o => {
+        if (!o.isMesh) return;
+        const b = new THREE.Box3().setFromObject(o);
+        if (b.max.z > frontMost) { frontMost = b.max.z; door = o; }
+      });
+      const db = new THREE.Box3().setFromObject(door);
+      const hinge = new THREE.Vector3(db.min.x, (db.min.y + db.max.y) / 2, (db.min.z + db.max.z) / 2);
+      const pivot = makeHolder();
+      pivot.position.copy(hinge);
+      door.parent.remove(door);
+      pivot.add(door);
+      door.position.sub(hinge);
+      model.add(pivot);
+
+      // The brass dial on the door turns as the combination is rolled
+      const cx = (db.min.x + db.max.x) / 2;
+      const cy = (db.min.y + db.max.y) / 2;
+      const fz = db.max.z;
+      const dial = makeHolder();
+      dial.position.set(cx - hinge.x, cy - hinge.y, fz + 0.05 - hinge.z);
+      const brass = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.3, metalness: 0.9 });
+      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.35, 28), brass);
+      knob.rotation.x = Math.PI / 2;
+      dial.add(knob);
+      const notch = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+      notch.position.set(0, 0.6, 0.2);
+      dial.add(notch);
+      pivot.add(dial);
+
+      // Lock light, lit red until the dial opens the door
+      const ledMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+      ledMesh.position.set(db.max.x - 1.2 - hinge.x, db.max.y - 1.0 - hinge.y, fz + 0.1 - hinge.z);
+      pivot.add(ledMesh);
+
+      model.scale.setScalar(0.142);          // the body is about 0.8 m wide
+      safe.rotation.y = Math.PI / 2;         // the door faces east, into the bedroom
+      safe.add(model);
+      centreAt(safe, SAFE.x, SAFE.y, SAFE.z, model);
+
+      safe.userData.ledMesh = ledMesh;
+      safe.userData.doorPivot = pivot;
+      safe.userData.dial = dial;
+    }).catch(err => console.warn('Safe model failed to load', err));
   }
 
   // ---------- Generator room: the generator and the airlock exit ----------
@@ -251,6 +330,30 @@ export class QuickWorld extends World {
     glow.position.set(EXIT.x, 2.6, EXIT.z - 0.2);
     this.scene.add(glow);
 
+    // The airlock is solid until it opens. Then the portal takes its place in the doorway.
+    this.exitCollider = new THREE.Box3(
+      new THREE.Vector3(EXIT.x - 1.36, 0, EXIT.z - 0.36),
+      new THREE.Vector3(EXIT.x + 1.36, 2.3, EXIT.z + 0.36)
+    );
+    this.colliders.push(this.exitCollider);
+
+    this.portalOpen = false;
+    this.portal = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.8, 2.2),
+      new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: PORTAL_VERT,
+        fragmentShader: PORTAL_FRAG,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+      })
+    );
+    this.portal.position.set(EXIT.x, 1.15, EXIT.z);
+    this.portal.visible = false;
+    this.scene.add(this.portal);
+
     loadGLB('models/airlock_door.glb').then(gltf => {
       const model = gltf.scene.clone(true);
       tidy(model);
@@ -272,12 +375,21 @@ export class QuickWorld extends World {
     }).catch(err => console.warn('Airlock door failed to load', err));
   }
 
-  // Called when Shadow 47 is down. The airlock unlocks and slides open.
+  // Called when Shadow 47 is down: the airlock unlocks and slides open, and the portal appears in the doorway
   openExit() {
     if (this.exitAction) {
       this.exitAction.paused = false;
       this.exitPlaying = true;
     }
+    const i = this.colliders.indexOf(this.exitCollider);
+    if (i >= 0) this.colliders.splice(i, 1);
+    this.portalOpen = true;
+    if (this.portal) this.portal.visible = true;
+  }
+
+  // True when the position (x, z) is close enough to the open portal to step through it
+  isInPortal(x, z) {
+    return this.portalOpen && Math.hypot(x - EXIT.x, z - EXIT.z) < 0.75;
   }
 
   // ---------- Horror dressing: props from the prop pack, and the paintings ----------
@@ -355,6 +467,7 @@ export class QuickWorld extends World {
       this.drawSkelevision(gameTime);
     }
     if (this.exitPlaying && this.exitMixer) this.exitMixer.update(delta);
+    if (this.portal && this.portal.visible) this.portal.material.uniforms.uTime.value = gameTime;
     return moving;
   }
 }

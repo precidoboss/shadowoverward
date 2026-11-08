@@ -52,6 +52,7 @@ export class UIManager {
     this.activeTapeTimer = null;
 
     this.bindEvents();
+    this.bindDial();
   }
 
   bindEvents() {
@@ -453,10 +454,131 @@ export class UIManager {
     pin.style.transform = `translate(-50%, -50%) rotate(${deg}deg)`;
   }
 
-  // SAFE KEYPAD MODAL
+  // SAFE DIAL: the combination is rolled on a dial, not typed. Set up once, in the constructor.
+  bindDial() {
+    this.dialAngle = 0;           // degrees the dial has been turned
+    this.dialDigits = [];         // digits locked so far
+    this.dialBusy = false;        // true while the result is showing
+    this.dialRing = document.getElementById('dial-ring');
+    this.dialFace = document.getElementById('dial-face');
+    this.dialReadout = document.getElementById('dial-readout');
+    this.dialSlotEls = Array.from(document.querySelectorAll('#dial-slots span'));
+
+    // The ten digits sit around the ring, 36 degrees apart
+    for (let i = 0; i < 10; i++) {
+      const s = document.createElement('span');
+      s.className = 'dial-num';
+      s.textContent = String(i);
+      s.style.transform = `rotate(${i * 36}deg) translateY(-112px) rotate(${-i * 36}deg)`;
+      this.dialRing.appendChild(s);
+    }
+
+    let last = null;
+    this.dialFace.addEventListener('pointerdown', e => {
+      last = this.pointerAngle(e);
+      this.dialFace.setPointerCapture(e.pointerId);
+    });
+    this.dialFace.addEventListener('pointermove', e => {
+      if (last === null) return;
+      const a = this.pointerAngle(e);
+      let d = a - last;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      last = a;
+      this.turnDial(d * 180 / Math.PI);
+    });
+    const release = () => {
+      if (last === null) return;
+      last = null;
+      this.dialAngle = Math.round(this.dialAngle / 36) * 36;   // click into the nearest digit
+      this.renderDial();
+    };
+    this.dialFace.addEventListener('pointerup', release);
+    this.dialFace.addEventListener('pointercancel', release);
+    this.dialFace.addEventListener('wheel', e => {
+      e.preventDefault();
+      this.turnDial(e.deltaY * 0.25);
+    }, { passive: false });
+
+    document.getElementById('btn-dial-lock').addEventListener('click', () => this.lockDigit());
+    document.getElementById('btn-dial-clear').addEventListener('click', () => this.clearDial());
+    window.addEventListener('keydown', e => {
+      if (this.safeKeypadModal.classList.contains('hidden')) return;
+      if (e.key === 'ArrowLeft') this.turnDial(-36);
+      else if (e.key === 'ArrowRight') this.turnDial(36);
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.lockDigit(); }
+      else if (e.key === 'Backspace') this.clearDial();
+    });
+  }
+
+  // Angle of the pointer around the centre of the dial, in radians
+  pointerAngle(e) {
+    const r = this.dialFace.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2));
+  }
+
+  // The digit under the pointer at the top of the dial
+  topDigit() {
+    const n = Math.round(-this.dialAngle / 36);
+    return ((n % 10) + 10) % 10;
+  }
+
+  turnDial(deg) {
+    if (this.dialBusy) return;
+    this.dialAngle += deg;
+    this.renderDial();
+  }
+
+  renderDial() {
+    this.dialRing.style.transform = `rotate(${this.dialAngle}deg)`;
+    const d = this.topDigit();
+    this.dialReadout.textContent = `DIGIT ${d}`;
+    if (this.game.turnSafeDial) this.game.turnSafeDial(d);
+  }
+
+  renderSlots(color = '#22ee55') {
+    this.dialSlotEls.forEach((el, i) => {
+      el.textContent = this.dialDigits[i] !== undefined ? this.dialDigits[i] : '_';
+      el.style.color = color;
+    });
+  }
+
+  // LOCK: sets the digit under the pointer. The fourth digit tries the combination.
+  lockDigit() {
+    if (this.dialBusy || this.dialDigits.length >= 4) return;
+    this.dialDigits.push(this.topDigit());
+    soundEngine.playKeypadBeep();
+    this.renderSlots();
+    if (this.dialDigits.length < 4) return;
+
+    this.dialBusy = true;
+    if (this.dialDigits.join('') === this.keypadTarget) {
+      soundEngine.playKeypadBeep(true);
+      this.renderSlots('#33ff55');
+      this.dialReadout.textContent = 'OPEN';
+      setTimeout(() => {
+        this.closeSafeKeypad();
+        this.game.unlockWallSafe();
+      }, 1000);
+    } else {
+      soundEngine.playKeypadBeep(false, true);
+      this.renderSlots('#ff3333');
+      this.dialReadout.textContent = 'DENIED';
+      setTimeout(() => this.clearDial(), 1200);
+    }
+  }
+
+  clearDial() {
+    this.dialDigits = [];
+    this.dialBusy = false;
+    this.renderSlots();
+    this.renderDial();
+  }
+
+  // SAFE DIAL MODAL
   openSafeKeypad() {
-    this.keypadCode = '';
-    this.updateKeypadDisplay();
+    this.dialAngle = 0;
+    this.clearDial();
     this.safeKeypadModal.classList.remove('hidden');
     this.game.state = 'KEYPAD';
     document.exitPointerLock();
@@ -468,33 +590,8 @@ export class UIManager {
     this.game.requestPointerLock();
   }
 
-  updateKeypadDisplay() {
-    const disp = document.getElementById('keypad-display');
-    const masked = (this.keypadCode + '____').substring(0, 4);
-    disp.innerText = masked;
-  }
-
-  submitKeypad() {
-    const disp = document.getElementById('keypad-display');
-    if (this.keypadCode === this.keypadTarget) {
-      soundEngine.playKeypadBeep(true);
-      disp.innerText = 'OPEN';
-      disp.style.color = '#33ff55';
-      setTimeout(() => {
-        this.closeSafeKeypad();
-        this.game.unlockWallSafe();
-      }, 1000);
-    } else {
-      soundEngine.playKeypadBeep(false, true);
-      disp.innerText = 'DENIED';
-      disp.style.color = '#ff3333';
-      setTimeout(() => {
-        this.keypadCode = '';
-        disp.style.color = '#22ee55';
-        this.updateKeypadDisplay();
-      }, 1200);
-    }
-  }
+  // The old typed keypad is gone; kept as a no-op for the legacy listeners in bindEvents
+  updateKeypadDisplay() {}
 
   // DOCUMENT MODAL
   openDocumentModal(title, text, hint) {

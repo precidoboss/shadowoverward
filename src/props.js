@@ -96,3 +96,21 @@ export function buildHighVoltageFuse() {
   g.add(glow);
   return g;
 }
+
+// Scales an object uniformly so its longest side is `length` metres.
+export function sizeLongest(obj, length) {
+  obj.updateWorldMatrix(true, true);
+  const s = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3());
+  const m = Math.max(s.x, s.y, s.z);
+  if (m > 0) obj.scale.multiplyScalar(length / m);
+  obj.updateWorldMatrix(true, true);
+}
+
+// Moves a model inside its group so the model's centre sits on the group's origin.
+export function centreInside(group, model) {
+  group.updateWorldMatrix(true, false);
+  model.updateWorldMatrix(true, false);
+  const c = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+  model.position.sub(group.worldToLocal(c.clone()));
+  model.updateWorldMatrix(true, false);
+}
