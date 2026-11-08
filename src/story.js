@@ -85,12 +85,19 @@ export const TAPES_DATABASE = {
   }
 };
 
+// Quick run: the last tape of the lost footage. Each step has a short objective and a line from the recording.
+export const QUICK_INTRO = [
+  '● REC  TAPE 4 OF 4\nOCT 31 1997  WARD B BASEMENT',
+  'THE CAMERAMAN\'S LAST RECORDING.\nHE NEVER CAME BACK UP.',
+  'YOU ARE HIM NOW. FIND A WAY OUT.\nFOLLOW THE ARROW AT THE TOP OF THE SCREEN.'
+];
+
 const QUICK_OBJECTIVES = [
-  { text: 'Take the service rifle in the north hall', target: { x: -4.5, z: -4.5 }, locationName: 'NORTH HALL' },
-  { text: 'Put down the infected staff in the halls', target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
-  { text: 'Take the high-voltage fuse in the bedroom', target: { x: -14.2, z: 4.9 }, locationName: 'BEDROOM' },
-  { text: 'Restore power at the generator, south end', target: { x: -5.4, z: 7.9 }, locationName: 'GENERATOR' },
-  { text: 'Destroy Shadow 47, then take the fire exit', target: { x: -3.7, z: 8.3 }, locationName: 'FIRE EXIT' }
+  { text: 'Pick up the dropped rifle [E]', log: 'FOOTAGE: HE DROPPED THE RIFLE RUNNING.', target: { x: -4.5, z: -4.5 }, locationName: 'NORTH HALL' },
+  { text: 'Clear the 2 infected staff in the halls', log: 'FOOTAGE: THEY WERE STAFF ONCE.\nTHEIR BADGES ARE STILL ON.', target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
+  { text: 'Take the fuse from the bedroom [E]', log: 'FOOTAGE: THE FUSE IS IN THE BEDROOM.\nTHE SHEETS ARE STILL WARM.', target: { x: -14.2, z: 4.9 }, locationName: 'BEDROOM' },
+  { text: 'Put the fuse in the generator [E]', log: 'FOOTAGE: POWER BACK ON SOUTH.\nSOMETHING IS WATCHING THE LIGHTS.', target: { x: -5.4, z: 7.9 }, locationName: 'GENERATOR' },
+  { text: 'Kill Shadow 47, then open the fire exit [E]', log: 'FOOTAGE: THE TAPE ENDS HERE.\nMAKE YOURS END DIFFERENTLY.', target: { x: -3.7, z: 8.3 }, locationName: 'FIRE EXIT' }
 ];
 
 export class StoryManager {
@@ -125,7 +132,9 @@ export class StoryManager {
 
   getCurrentObjective() {
     const obj = this.objectives[this.currentObjectiveIndex];
-    return obj ? obj.text : 'Escape the Sanatorium!';
+    if (!obj) return 'Escape the Sanatorium!';
+    // The quick run shows its step number so the order is always clear
+    return this.quick ? `STEP ${this.currentObjectiveIndex + 1}/${this.objectives.length}: ${obj.text}` : obj.text;
   }
 
   getCurrentObjectiveData() {
@@ -136,7 +145,8 @@ export class StoryManager {
     if (index > this.currentObjectiveIndex) {
       this.currentObjectiveIndex = index;
       this.ui.updateObjective(this.getCurrentObjective());
-      this.ui.showBannerNotification(`OBJECTIVE UPDATED:\n${this.getCurrentObjective()}`);
+      const log = this.quick && this.objectives[index] ? this.objectives[index].log + '\n' : '';
+      this.ui.showBannerNotification(`${log}${this.getCurrentObjective()}`);
     }
   }
 

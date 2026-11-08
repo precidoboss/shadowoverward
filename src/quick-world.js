@@ -48,7 +48,18 @@ export class QuickWorld extends World {
       corridor.traverse(o => {
         if (o.isMesh && o.material) {
           o.material = o.material.clone();
-          o.material.side = THREE.DoubleSide;
+          const mat = o.material;
+          // The model marks every material as alpha-blended. Blended surfaces do not write depth, so walls
+          // drawn behind other walls showed through them up close. They are all solid, so make them opaque.
+          if (mat.color && mat.color.r > 0.99 && mat.color.g > 0.99 && mat.opacity < 0.05) {
+            o.visible = false;   // one fully transparent helper material
+          }
+          mat.transparent = false;
+          mat.opacity = 1;
+          mat.depthWrite = true;
+          mat.alphaTest = 0;
+          mat.side = THREE.DoubleSide;
+          mat.needsUpdate = true;
         }
       });
       this.scene.add(corridor);

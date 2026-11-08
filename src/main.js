@@ -7,13 +7,14 @@ import { StoryManager } from './story.js';
 import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
+import { QUICK_INTRO } from './story.js';
 import { QuickWorld, preloadQuickModels } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
 
 // The loading screen stays up at least this long, so the wait reads as deliberate
-const MIN_LOADING_MS = 5000;
+const MIN_LOADING_MS = 2500;
 const BOSS_HIT_DAMAGE = 35;
 const QUICK_MUTANT_SPAWNS = [[-8, -2.1], [-9, 5]];
 const FULL_START = { x: 0, z: 19 };
@@ -32,7 +33,7 @@ export class LostFootageGame {
     // Linear fog: clear up to 14 meters, subtle depth beyond 45m
     this.scene.fog = new THREE.Fog(0x0c131a, 14, 48);
 
-    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 80);
+    this.camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.03, 80);
 
     // Renderer - optimized for solid 60fps performance without lag
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -242,7 +243,16 @@ export class LostFootageGame {
     this.ui.hideMainMenu();
     this.requestPointerLock();
     this.ui.updateObjective(this.story.getCurrentObjective());
-    this.ui.showBannerNotification("REC START: OCT 31 1997\nSHADOW OVER WARD B\n[Press V to Toggle 1st / 3rd Person]");
+    if (this.levelKind === 'quick') {
+      // Short found-footage opening, one line at a time
+      this.clearBriefing();
+      QUICK_INTRO.forEach((line, i) => {
+        if (i === 0) this.ui.showBannerNotification(line);
+        else this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), i * 3800));
+      });
+    } else {
+      this.ui.showBannerNotification("REC START: OCT 31 1997\nSHADOW OVER WARD B\n[Press V to Toggle 1st / 3rd Person]");
+    }
   }
 
   pauseGame() {
@@ -429,10 +439,10 @@ export class LostFootageGame {
 
     // 10. Service rifle and ammunition
     else if (data.type === 'rifle') {
-      this.weapons.acquireRifle(12);
+      this.weapons.acquireRifle(14);
       if (this.story.quick) this.story.advanceObjective(1);
       soundEngine.playItemPickup();
-      this.ui.showBannerNotification("RECOVERED: SERVICE RIFLE + 12 ROUNDS\n[Q] SWITCH WEAPON  •  [LEFT CLICK] FIRE");
+      this.ui.showBannerNotification("RECOVERED: SERVICE RIFLE + 14 ROUNDS\n[Q] SWITCH WEAPON  •  [LEFT CLICK] FIRE");
       target.visible = false;
       target.userData.isInteractable = false;
     } else if (data.type === 'ammo') {
@@ -448,13 +458,11 @@ export class LostFootageGame {
   showBossBriefing() {
     this.clearBriefing();
     const lines = [
-      'SHADOW 47 IS AWAKE. THIS IS THE LAST FIGHT.',
-      'FISTS DEAL 1 DAMAGE. THE RIFLE DEALS 2 PER SHOT. [Q] SWITCHES.',
-      'IT HITS FOR 35 ONLY IF YOU STAY IN REACH (1.3m) FOR ONE SECOND.',
-      'KILL IT, THEN TAKE THE FIRE EXIT.'
+      'SHADOW 47 IS AWAKE. STAY OUT OF ITS REACH.',
+      'FISTS = 1 DAMAGE.  RIFLE = 2 PER SHOT.  [Q] SWITCHES.\nKILL IT, THEN USE THE FIRE EXIT.'
     ];
     lines.forEach((line, i) => {
-      this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 3000 + i * 4800));
+      this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 2000 + i * 4200));
     });
   }
 

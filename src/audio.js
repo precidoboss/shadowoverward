@@ -95,94 +95,166 @@ export class SoundEngine {
     beep(2349, now + 0.16, 0.12); // D7
   }
 
-  // 2. Rich, Atmospheric Creepy Sanatorium Drone (audible on laptop speakers)
+  // 2. No constant drone or wind bed (it read as a buzz). Spooky one-shots play roughly every 30 seconds instead.
   startAmbience() {
     if (!this.ctx || this.ambienceStarted) return;
     this.ambienceStarted = true;
-
-    // Atmospheric Drone: Eerie minor chord (A2 110Hz, C3 130.8Hz, E3 164.8Hz)
-    const freqs = [110, 130.8, 164.8, 220];
-    freqs.forEach((f, idx) => {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
-
-      osc.type = idx % 2 === 0 ? 'triangle' : 'sine';
-      osc.frequency.setValueAtTime(f + (Math.random() - 0.5) * 1.5, this.ctx.currentTime);
-
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(320 + idx * 80, this.ctx.currentTime);
-
-      gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
-
-      // Subtle slow volume swell
-      const lfo = this.ctx.createOscillator();
-      lfo.frequency.setValueAtTime(0.15 + idx * 0.05, this.ctx.currentTime);
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-      lfo.connect(lfoGain);
-      lfoGain.connect(gain.gain);
-      lfo.start();
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain);
-      osc.start();
-    });
-
-    // Cold wind howling through windows (audible bandpass at 400-800Hz)
-    const bufferSize = this.ctx.sampleRate * 2;
-    const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const whiteNoise = this.ctx.createBufferSource();
-    whiteNoise.buffer = noiseBuffer;
-    whiteNoise.loop = true;
-
-    const windFilter = this.ctx.createBiquadFilter();
-    windFilter.type = 'bandpass';
-    windFilter.frequency.setValueAtTime(520, this.ctx.currentTime);
-    windFilter.Q.setValueAtTime(2.8, this.ctx.currentTime);
-
-    const windGain = this.ctx.createGain();
-    windGain.gain.setValueAtTime(0.24, this.ctx.currentTime);
-
-    const windLfo = this.ctx.createOscillator();
-    windLfo.frequency.setValueAtTime(0.18, this.ctx.currentTime);
-    const windLfoGain = this.ctx.createGain();
-    windLfoGain.gain.setValueAtTime(260, this.ctx.currentTime);
-    windLfo.connect(windLfoGain);
-    windLfoGain.connect(windFilter.frequency);
-    windLfo.start();
-
-    whiteNoise.connect(windFilter);
-    windFilter.connect(windGain);
-    windGain.connect(this.masterGain);
-    whiteNoise.start();
-
-    // Occasional creepy environmental metal clanks & pipe groans
     this.scheduleEerieEvents();
   }
 
   scheduleEerieEvents() {
+    const events = ['pipe', 'thud', 'whisper', 'musicbox', 'wail', 'scratch', 'doorslam', 'knock', 'breath'];
+    let last = '';
     const trigger = () => {
-      if (this.ctx && !this.isMuted) {
-        const rand = Math.random();
-        if (rand < 0.4) {
-          this.playPipeGroan();
-        } else if (rand < 0.7) {
-          this.playDistantThud();
-        } else {
-          this.playWhisperVoice();
-        }
+      // Only while a run is in progress (music is on), never in menus or on the pause screen
+      if (this.ctx && !this.isMuted && this.musicWanted) {
+        let pick;
+        do { pick = events[(Math.random() * events.length) | 0]; } while (pick === last);
+        last = pick;
+        this.playSpooky(pick);
       }
-      const nextTime = 5000 + Math.random() * 8000;
-      setTimeout(trigger, nextTime);
+      setTimeout(trigger, 25000 + Math.random() * 10000);   // about every 30 s
     };
-    setTimeout(trigger, 4000);
+    setTimeout(trigger, 14000 + Math.random() * 6000);
+  }
+
+  playSpooky(kind) {
+    switch (kind) {
+      case 'pipe': return this.playPipeGroan();
+      case 'thud': return this.playDistantThud();
+      case 'whisper': return this.playWhisperVoice();
+      case 'musicbox': return this.playMusicBox();
+      case 'wail': return this.playDistantWail();
+      case 'scratch': return this.playScratching();
+      case 'doorslam': return this.playDistantDoorSlam();
+      case 'knock': return this.playKnocking();
+      case 'breath': return this.playBreath();
+      default: return undefined;
+    }
+  }
+
+  // A slow, slightly out-of-tune music box phrase from somewhere far away
+  playMusicBox() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t0 = this.ctx.currentTime;
+    const notes = [659, 587, 523, 587, 659, 659, 622, 0, 587, 587, 554];
+    notes.forEach((f, i) => {
+      if (!f) return;
+      const t = t0 + i * 0.42;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f * (1 + (Math.random() - 0.5) * 0.02), t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.09, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+      osc.connect(g); g.connect(this.masterGain);
+      osc.start(t); osc.stop(t + 1.2);
+    });
+  }
+
+  // A thin, distant wail that rises and falls
+  playDistantWail() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const vib = this.ctx.createOscillator();
+    const vg = this.ctx.createGain();
+    const bp = this.ctx.createBiquadFilter();
+    const g = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(330, t);
+    osc.frequency.linearRampToValueAtTime(520, t + 1.6);
+    osc.frequency.linearRampToValueAtTime(260, t + 3.4);
+    vib.frequency.value = 5.5;
+    vg.gain.value = 14;
+    vib.connect(vg); vg.connect(osc.frequency);
+    bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 3;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.07, t + 1.2);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.6);
+    osc.connect(bp); bp.connect(g); g.connect(this.masterGain);
+    osc.start(t); vib.start(t); osc.stop(t + 3.7); vib.stop(t + 3.7);
+  }
+
+  // Something scratching at the other side of a wall
+  playScratching() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t0 = this.ctx.currentTime;
+    for (let i = 0; i < 7; i++) {
+      const t = t0 + i * 0.13 + Math.random() * 0.05;
+      const n = this._noise(0.1);
+      const hp = this.ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 2500;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      n.connect(hp); hp.connect(g); g.connect(this.masterGain);
+      n.start(t);
+    }
+  }
+
+  // A heavy door slamming a few rooms away
+  playDistantDoorSlam() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, t);
+    osc.frequency.exponentialRampToValueAtTime(32, t + 0.3);
+    og.gain.setValueAtTime(0.7, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(og); og.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.55);
+    const n = this._noise(0.4);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 600;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.35, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    n.connect(lp); lp.connect(ng); ng.connect(this.masterGain);
+    n.start(t);
+  }
+
+  // Three slow knocks
+  playKnocking() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t0 = this.ctx.currentTime;
+    [0, 0.7, 1.4].forEach(dt => {
+      const t = t0 + dt;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180, t);
+      osc.frequency.exponentialRampToValueAtTime(70, t + 0.12);
+      g.gain.setValueAtTime(0.5, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      osc.connect(g); g.connect(this.masterGain);
+      osc.start(t); osc.stop(t + 0.2);
+    });
+  }
+
+  // A slow breath close behind you
+  playBreath() {
+    if (!this.ctx) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const n = this._noise(2.2);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1100; bp.Q.value = 0.9;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.12, t + 0.9);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.1);
+    n.connect(bp); bp.connect(g); g.connect(this.masterGain);
+    n.start(t);
   }
 
   // 3. Crisp, Punchy Footsteps

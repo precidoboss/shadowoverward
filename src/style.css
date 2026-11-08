@@ -893,3 +893,5 @@ canvas {
 #hitmarker i:nth-child(4) { right: 0; bottom: 4px; transform: rotate(45deg); }
 #hitmarker.kill i { background: #ff2a2a; width: 13px; height: 3px; }
 #crosshair.kick { transform: translate(-50%, -50%) scale(1.5); }
+
+.guide-grid .guide-head { color: #66ff88 !important; font-size: 11px; letter-spacing: 2px; margin-top: 6px; border-bottom: 1px solid rgba(102,255,136,0.25); }

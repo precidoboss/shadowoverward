@@ -16,25 +16,68 @@ const gunWood = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.8
 const ammoMat = new THREE.MeshStandardMaterial({ color: 0x55663a, roughness: 0.9 });
 const fuseMat = new THREE.MeshStandardMaterial({ color: 0xd9b400, roughness: 0.4, metalness: 0.3 });
 
+const gunPoly = new THREE.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.75, metalness: 0.15 });
+const gunLens = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2200, emissiveIntensity: 0.9 });
+const gloveMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1e, roughness: 0.9 });
+const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0.95 });
+
 // Procedural service rifle, pointing down its local -z. The Shooter Pack has animations for a rifle
-// but no rifle mesh, so the gun is built from boxes and cylinders.
-export function buildRifleMesh() {
+// but no rifle mesh, so the gun is built from boxes and cylinders: receiver, rail optic, ribbed
+// handguard, barrel with muzzle brake, curved magazine, pistol grip and stock.
+// With hands = true the gunner's gloves and sleeves are added too (first-person view only).
+export function buildRifleMesh(hands = false) {
   const g = new THREE.Group();
-  const add = (w, h, d, mat, x, y, z) => {
+  const box = (w, h, d, mat, x, y, z, rx = 0, ry = 0) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     m.position.set(x, y, z);
-    m.castShadow = true;
+    m.rotation.set(rx, ry, 0);
+    m.castShadow = !hands;
     g.add(m);
     return m;
   };
-  add(0.075, 0.09, 0.36, gunMetal, 0, 0, 0);            // receiver
-  add(0.024, 0.024, 0.36, gunMetal, 0, 0.02, -0.36);    // barrel
-  add(0.06, 0.1, 0.22, gunWood, 0, -0.01, 0.27);        // stock
-  add(0.04, 0.13, 0.05, gunMetal, 0, -0.11, -0.02);     // magazine
-  add(0.04, 0.11, 0.05, gunWood, 0, -0.1, 0.1);         // grip
-  add(0.02, 0.03, 0.04, gunMetal, 0, 0.07, -0.1);       // sight
-  const flash = modelFactory.makeGlow(0xffcc66, 0.22);
-  flash.position.set(0, 0.02, -0.56);
+  const tube = (r, len, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 12), mat);
+    m.rotation.x = Math.PI / 2;
+    m.position.set(x, y, z);
+    m.castShadow = !hands;
+    g.add(m);
+    return m;
+  };
+  box(0.05, 0.085, 0.24, gunMetal, 0, -0.005, 0.0);                 // lower receiver
+  box(0.056, 0.06, 0.3, gunMetal, 0, 0.05, -0.02);                  // upper receiver
+  box(0.03, 0.012, 0.3, gunMetal, 0, 0.088, -0.02);                 // top rail
+  box(0.042, 0.042, 0.13, gunPoly, 0, 0.115, -0.05);                // optic body
+  tube(0.017, 0.03, gunLens, 0, 0.115, -0.125);                     // optic lens
+  box(0.064, 0.064, 0.27, gunPoly, 0, 0.03, -0.285);                // handguard
+  for (let i = 0; i < 4; i++) box(0.068, 0.012, 0.02, gunMetal, 0, 0.03, -0.2 - i * 0.055); // handguard ribs
+  tube(0.0115, 0.3, gunMetal, 0, 0.04, -0.58);                      // barrel
+  tube(0.017, 0.07, gunMetal, 0, 0.04, -0.75);                      // muzzle brake
+  box(0.008, 0.05, 0.008, gunMetal, 0, 0.075, -0.68);               // front sight
+  box(0.046, 0.1, 0.19, gunPoly, 0, -0.012, 0.24);                  // stock
+  box(0.052, 0.115, 0.025, gunMetal, 0, -0.012, 0.345);             // butt pad
+  box(0.036, 0.1, 0.05, gunPoly, 0, -0.085, 0.085, -0.35);          // pistol grip
+  box(0.036, 0.14, 0.06, gunMetal, 0, -0.115, -0.065, 0.16);        // magazine
+  box(0.022, 0.02, 0.1, gunMetal, 0, -0.058, 0.02);                 // trigger guard
+
+  if (hands) {
+    // Right hand on the grip, forearm back toward the shoulder
+    box(0.058, 0.06, 0.09, gloveMat, 0.0, -0.1, 0.085);
+    box(0.066, 0.066, 0.34, sleeveMat, 0.045, -0.19, 0.3, -0.3);
+    // Left hand cupped under the handguard, forearm angled back to the left
+    box(0.07, 0.056, 0.11, gloveMat, 0.0, -0.012, -0.27);
+    box(0.066, 0.066, 0.42, sleeveMat, -0.1, -0.15, -0.06, -0.15, -0.38);
+    g.traverse(o => {
+      // The view model is drawn on top of the world so it never sinks into a wall
+      if (o.isMesh) {
+        o.material = o.material.clone();
+        o.material.depthTest = false;
+        o.renderOrder = 1000;
+      }
+    });
+  }
+
+  const flash = modelFactory.makeGlow(0xffcc66, 0.3);
+  flash.position.set(0, 0.04, -0.82);
   flash.visible = false;
   g.add(flash);
   g.userData.flash = flash;
@@ -92,13 +135,14 @@ export class WeaponSystem {
     this._hit = new THREE.Vector3();
     this._hand = new THREE.Vector3();
     this._v = new THREE.Vector3();
+    this._gripOff = new THREE.Vector3();
     this._handQ = new THREE.Quaternion();
     this.raycaster = new THREE.Raycaster();
     this.hand = null;
 
     // First-person view: the rifle sits in front of the camera
-    this.gunFP = buildRifleMesh();
-    this.gunFP.position.set(0.22, -0.2, -0.42);
+    this.gunFP = buildRifleMesh(true);
+    this.gunFP.position.set(0.2, -0.2, -0.36);
     this.gunFP.visible = false;
     this.player.camera.add(this.gunFP);
 
@@ -319,7 +363,7 @@ export class WeaponSystem {
     }
     // First-person rifle snaps back and returns
     this.kick = Math.max(0, this.kick - delta * 9);
-    this.gunFP.position.set(0.22, -0.2 + this.kick * 0.015, -0.42 + this.kick * 0.09);
+    this.gunFP.position.set(0.2, -0.2 + this.kick * 0.015, -0.36 + this.kick * 0.09);
     this.gunFP.rotation.x = this.kick * 0.14;
     this.fireCooldown = Math.max(0, this.fireCooldown - delta);
     this.punchCooldown = Math.max(0, this.punchCooldown - delta);
@@ -339,12 +383,14 @@ export class WeaponSystem {
     if (!this.hand && this.player.rig) {
       this.player.rig.root.traverse(o => { if (o.name === 'mixamorigRightHand') this.hand = o; });
     }
-    // Position the third-person rifle at the hand, every frame, so it follows the animation
+    // Third-person rifle: held at the hand, pointed where the camera aims, so it always matches the shots
     if (tp && this.hand) {
       this.hand.getWorldPosition(this._hand);
-      this.hand.getWorldQuaternion(this._handQ);
-      this.gunTP.position.copy(this._hand);
+      this.player.pitchObject.getWorldQuaternion(this._handQ);
       this.gunTP.quaternion.copy(this._handQ);
+      // Put the grip (not the middle of the gun) at the hand
+      this._gripOff.set(0, 0.1, -0.09).applyQuaternion(this._handQ);
+      this.gunTP.position.copy(this._hand).add(this._gripOff);
     }
     this.gunFP.visible = this.armed && !tp;
     this.gunTP.visible = this.armed && tp;
