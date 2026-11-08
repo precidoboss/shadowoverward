@@ -31,6 +31,9 @@
           <div class="objective-label">PRIMARY OBJECTIVE</div>
           <div id="objective-text">Search the Reception Lobby for the Ward A Key</div>
           <div id="waypoint-beacon" class="hud-waypoint-beacon">◆ TARGET: RECEPTION DESK [12m away]</div>
+          <div id="objective-arrow" class="objective-arrow" title="Points toward your target">
+            <svg viewBox="0 0 24 24" width="40" height="40"><path d="M12 2 L21 20 L12 15.5 L3 20 Z" fill="#ffcc00"/></svg>
+          </div>
         </div>
         <div style="display: flex; align-items: center; gap: 18px;">
           <button id="hud-audio-status" class="hud-audio-pill" style="pointer-events: auto;">🔊 AUDIO ON</button>
@@ -49,6 +52,21 @@
       <div id="notification-banner"></div>
 
       <!-- Bottom Status Row -->
+      <div id="guide-panel" class="guide-panel">
+        <div class="guide-title">HOW TO PLAY <span>[H]</span></div>
+        <div class="guide-grid">
+          <span>[W A S D]</span><span>Move</span>
+          <span>[SHIFT]</span><span>Run (loud)</span>
+          <span>[C]</span><span>Crouch (quiet)</span>
+          <span>[F]</span><span>Flashlight (407 sees it)</span>
+          <span>[E]</span><span>Pick up / open / read</span>
+          <span>[V]</span><span>1st / 3rd person</span>
+          <span>[M]</span><span>Map</span>
+          <span>[TAB]</span><span>Bag and VCR</span>
+          <span>[ESC]</span><span>Pause</span>
+        </div>
+        <div class="guide-line"><strong>Character:</strong> <span id="guide-char"></span></div>
+      </div>
       <div class="hud-bottom-bar">
         <div class="cam-meta">
           <div>OCT 31 1997</div>

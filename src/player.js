@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeChildMeshes } from './mesh-utils.js';
-import { CharacterAnimator } from './character-anim.js';
+import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
 import { soundEngine } from './audio.js';
 import { textureGen } from './textures.js';
 
@@ -308,24 +308,58 @@ export class Player {
 
   // Procedural pose + gait. Driven by bobTimer (stride phase) and movement state.
   hasAnimatedCharacter() {
-    return !!(this.animator && this.animator.ready);
+    return !!this.rig;
   }
 
-  // Loads the Mixamo character. Until it is ready, the procedural investigator stays on screen.
+  // Loads the rigged investigator. Until it is ready, the procedural figure stays on screen.
+  // characterStatus is 'loading' | 'rigged' | 'fallback' and is shown in the in-game guide.
   startCharacterAnimator() {
-    this.animator = new CharacterAnimator();
-    this.animator.load().then(ok => {
-      if (!ok) return;
+    this.characterStatus = 'loading';
+    loadRiggedCharacter({
+      mesh: 'animations/main-idle.fbx',
+      clips: {
+        idle: 'animations/main-idle.fbx',
+        walk: 'animations/walking.fbx',
+        run: 'animations/main-run.fbx',
+        crouchDown: 'animations/main-crouch-down.fbx',
+        crouchIdle: 'animations/main-crouch-idle.fbx',
+        crouchWalk: 'animations/main-crouch-walk.fbx',
+        standUp: 'animations/main-stand-up.fbx'
+      },
+      height: 1.75
+    }).then(({ root, clips }) => {
+      this.rig = new RigPlayer(root, clips);
+      this.rig.play('idle');
+      this.characterStatus = 'rigged';
       this.characterGroup.visible = false;
-      this.yawObject.add(this.animator.root);
+      this.yawObject.add(root);
       this.updateViewPerspective();
+    }).catch(err => {
+      this.characterStatus = 'fallback';
+      console.warn('Investigator model unavailable, showing the basic figure:', err);
     });
   }
 
+  // Chooses the clip for the investigator's current state. Crouching plays a one-shot dip and rise between stances.
+  updateRigPose(isMoving) {
+    const crouch = this.isCrouching;
+    if (crouch && !this.wasCrouching) {
+      this.rig.play('crouchDown', { once: true, then: 'crouchIdle', fade: 0.2 });
+    } else if (!crouch && this.wasCrouching) {
+      this.rig.play('standUp', { once: true, then: 'idle', fade: 0.2 });
+    } else if (this.rig.current !== 'crouchDown' && this.rig.current !== 'standUp') {
+      if (crouch) this.rig.play(isMoving ? 'crouchWalk' : 'crouchIdle');
+      else if (!isMoving) this.rig.play('idle');
+      else if (this.isSprinting) this.rig.play('run');
+      else this.rig.play('walk');
+    }
+    this.wasCrouching = crouch;
+  }
+
   animateCharacter(delta, isMoving) {
-    if (this.hasAnimatedCharacter()) {
-      this.animator.play(!isMoving ? 'idle' : this.isSprinting ? 'run' : 'walk');
-      this.animator.update(delta);
+    if (this.rig) {
+      this.updateRigPose(isMoving);
+      this.rig.update(delta);
       return;
     }
     const target = isMoving ? 1 : 0;
@@ -498,7 +532,7 @@ export class Player {
       this.charHead.visible = true;
       this.characterGroup.visible = !this.hasAnimatedCharacter();
     }
-    if (this.hasAnimatedCharacter()) this.animator.root.visible = this.viewMode === 'THIRD_PERSON';
+    if (this.rig) this.rig.root.visible = this.viewMode === 'THIRD_PERSON';
   }
 
   bindEvents() {

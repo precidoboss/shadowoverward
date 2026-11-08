@@ -12,6 +12,17 @@ export class UIManager {
     this.interactionPrompt = document.getElementById('interaction-prompt');
     this.objectiveText = document.getElementById('objective-text');
     this.waypointBeacon = document.getElementById('waypoint-beacon');
+    this.objectiveArrow = document.getElementById('objective-arrow');
+    this.guidePanel = document.getElementById('guide-panel');
+    this.guideGoal = document.getElementById('guide-goal');
+    this.guideChar = document.getElementById('guide-char');
+    this.guideOpen = true;
+    this.guideManual = false;
+    this._guideChar = '';
+    this._guideGoal = '';
+    document.addEventListener('keydown', e => {
+      if (e.code === 'KeyH' && !e.repeat && (this.game.state === 'PLAYING' || this.game.state === 'PAUSED')) this.toggleGuide();
+    });
     this.notificationBanner = document.getElementById('notification-banner');
     this.timecodeElem = document.getElementById('cam-timecode');
     this.batteryFillElem = document.getElementById('cam-battery-fill');
@@ -297,6 +308,8 @@ export class UIManager {
       this.zoomLabel.style.color = this.game.player.isZoomed ? '#ffff55' : '#888888';
     }
 
+    this.updateGuide(timeSeconds, playerPos, playerRotationY);
+
     // Waypoint Beacon distance calculation
     if (this.waypointBeacon && playerPos) {
       const objData = this.game.story.getCurrentObjectiveData();
@@ -306,6 +319,52 @@ export class UIManager {
         const dist = Math.round(Math.sqrt(dx * dx + dz * dz));
 
         this.waypointBeacon.innerHTML = `◆ TARGET: <strong>${objData.locationName}</strong> [${dist}m away] <span style="font-size:14px; opacity:0.8;">(Press M for Map)</span>`;
+      }
+    }
+  }
+
+  toggleGuide() {
+    this.guideOpen = !this.guideOpen;
+    this.guideManual = true;
+    if (this.guidePanel) this.guidePanel.classList.toggle('hidden', !this.guideOpen);
+  }
+
+  // Guide panel opens at the start and hides itself after a minute unless toggled.
+  // The arrow turns to face the current objective, relative to where the player is looking.
+  updateGuide(timeSeconds, playerPos, playerRotationY) {
+    if (this.guidePanel && this.guideOpen && !this.guideManual && timeSeconds > 60) {
+      this.guideOpen = false;
+      this.guidePanel.classList.add('hidden');
+    }
+
+    const objData = this.game.story.getCurrentObjectiveData();
+    const player = this.game.player;
+    if (!objData || !player) return;
+
+    const charText = player.characterStatus === 'rigged' ? 'animated'
+      : player.characterStatus === 'fallback' ? 'basic (see console)'
+      : 'loading';
+    const viewHint = player.viewMode === 'FIRST_PERSON' ? ' | [V] for 3rd person' : '';
+    if (this.guideChar && charText + viewHint !== this._guideChar) {
+      this._guideChar = charText + viewHint;
+      this.guideChar.innerText = this._guideChar;
+    }
+    if (this.guideGoal && objData.text !== this._guideGoal) {
+      this._guideGoal = objData.text;
+      this.guideGoal.innerText = objData.text;
+    }
+
+    if (this.objectiveArrow && playerPos && objData.target) {
+      const dx = objData.target.x - playerPos.x;
+      const dz = objData.target.z - playerPos.z;
+      const arrived = Math.hypot(dx, dz) < 2.5;
+      this.objectiveArrow.classList.toggle('hidden', arrived);
+      if (!arrived) {
+        // Yaw 0 faces -z, so the facing angle is yaw + pi on the same scale as atan2(dx, dz)
+        const heading = playerRotationY + Math.PI;
+        let rel = Math.atan2(dx, dz) - heading;
+        rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+        this.objectiveArrow.style.transform = `rotate(${-rel}rad)`;
       }
     }
   }

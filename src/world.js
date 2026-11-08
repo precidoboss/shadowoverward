@@ -245,6 +245,8 @@ export class World {
     this.createWall(-3, Y, 8.5, 0.4, H, 7, wallMat);
     this.createWall(-3, Y, -0.5, 0.4, H, 6, wallMat);
     this.createWall(-3, Y, -9.5, 0.4, H, 6, wallMat);
+    // Gap in the west corridor wall between z -6.5 and -3.5 had no door; closed so it is not an open hole
+    this.addSolidBlock(-3, Y, -5.0, 0.4, H, 3.0, wallMat);
     this.createWall(3, Y, 8.5, 0.4, H, 7, wallMat);
     this.createWall(3, Y, -0.5, 0.4, H, 6, wallMat);
     this.createWall(3, Y, -9.5, 0.4, H, 6, wallMat);

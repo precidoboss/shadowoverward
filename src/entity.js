@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { modelFactory } from './models.js';
 import { soundEngine } from './audio.js';
+import { loadRiggedCharacter, RigPlayer } from './character-anim.js';
 
 const SPAWN = new THREE.Vector3(0, 0, -10);
 
@@ -42,15 +43,104 @@ export class EntityAI {
     this.crawl = 0;
     this.proximityDanger = 0; // 0 to 1
     this.spottedTimer = 0;
+    // After it wakes, it patrols for this many seconds and cannot detect the player
+    this.graceTime = 20;
+    this.grace = 0;
+    this.grabTimer = 0;
+    this.stuck = 0;
 
     // Scratch vectors (no per-frame allocations)
     this._targetPos = new THREE.Vector3();
     this._dir = new THREE.Vector3();
+    this._before = new THREE.Vector3();
+    this._probeBox = new THREE.Box3();
+    this._eyePos = new THREE.Vector3();
+
+    // Set by main.js so the entity can be stopped by walls and doors
+    this.world = null;
+    // Rigged body (replaces the procedural one once loaded)
+    this.rig = null;
+    this.headBone = null;
+    this.eyeGlow = null;
+  }
+
+  // Keeps the entity inside the level: it cannot pass through walls, shut doors or furniture.
+  // Tries the full step, then each axis on its own, so it slides along walls.
+  moveWithWalls(pos, dir, step) {
+    const nx = pos.x + dir.x * step;
+    const nz = pos.z + dir.z * step;
+    if (!this.blockedAt(nx, nz)) { pos.x = nx; pos.z = nz; }
+    else if (!this.blockedAt(nx, pos.z)) pos.x = nx;
+    else if (!this.blockedAt(pos.x, nz)) pos.z = nz;
+  }
+
+  blockedAt(x, z) {
+    if (!this.world) return false;
+    const b = this._probeBox;
+    b.min.set(x - 0.3, 0, z - 0.3);
+    b.max.set(x + 0.3, 1.8, z + 0.3);
+    const cols = this.world.colliders;
+    for (let i = 0; i < cols.length; i++) {
+      if (b.intersectsBox(cols[i])) return true;
+    }
+    return false;
+  }
+
+  // Swaps the procedural body for the rigged Mixamo character. Its breathing and walking clips drive it.
+  async loadRig() {
+    try {
+      const { root, clips } = await loadRiggedCharacter({
+        mesh: 'animations/enemy-breathing.fbx',
+        clips: { breathing: 'animations/enemy-breathing.fbx', walk: 'animations/enemy-walk.fbx' },
+        height: 1.9,
+        slimX: 0.8
+      });
+      root.traverse(o => {
+        if (o.isBone && !this.headBone && /Head$/.test(o.name)) this.headBone = o;
+        if (o.isMesh) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => { if (m.color) m.color.multiplyScalar(0.35); });
+        }
+      });
+      // Hide the procedural body's meshes and glow sprites. Lights stay on, so no shader recompiles.
+      this.mesh.traverse(o => { if (o.isMesh || o.isSprite) o.visible = false; });
+      this.eyeGlow = modelFactory.makeGlow(0x9fe8ff, 0.3);
+      this.mesh.add(this.eyeGlow);
+      this.mesh.add(root);
+      this.rig = new RigPlayer(root, clips);
+      this.rig.play('breathing');
+    } catch (err) {
+      console.warn('Subject 407 model unavailable, using the basic body:', err);
+    }
+  }
+
+  // Walk clip speed follows the entity's speed, so patrol looks slow and the chase looks quick.
+  animateRig(delta, speed) {
+    if (speed > 0.01) this.rig.play('walk', { fade: 0.2, timeScale: THREE.MathUtils.clamp(speed / 1.6, 0.7, 2.4) });
+    else this.rig.play('breathing', { fade: 0.4 });
+    this.rig.update(delta);
+    this.placeEyes();
+  }
+
+  // Keeps the eye light and glow at the rigged head
+  placeEyes() {
+    if (!this.headBone) return;
+    const p = this._eyePos;
+    this.headBone.getWorldPosition(p);
+    this.mesh.worldToLocal(p);
+    p.z += 0.2;
+    p.y += 0.02;
+    if (this.eyeGlow) this.eyeGlow.position.copy(p);
+    const light = this.mesh.userData.eyeLight;
+    if (light) light.position.copy(p);
   }
 
   activate() {
     this.isActive = true;
     this.mesh.visible = true;
+    this.grace = 0;
+    this.grabTimer = 0;
+    this.stuck = 0;
   }
 
   // Restore the dormant state for a new run
@@ -64,6 +154,9 @@ export class EntityAI {
     this.patrolWaitTimer = 0;
     this.spottedTimer = 0;
     this.proximityDanger = 0;
+    this.grace = 0;
+    this.grabTimer = 0;
+    this.stuck = 0;
     this.player.entityProximityFlicker = false;
   }
 
@@ -90,7 +183,9 @@ export class EntityAI {
     const playerIsRunning = this.player.isSprinting && (this.player.moveForward || this.player.moveBackward);
     const hearingDist = playerIsRunning ? 15.0 : 5.0;
     const canSee = distToPlayer < 12.0 && (this.player.flashlightOn || distToPlayer < 4.0);
-    const playerSpotted = distToPlayer < hearingDist || canSee;
+    this.grace = Math.min(this.graceTime, this.grace + delta);
+    const awake = this.grace >= this.graceTime;
+    const playerSpotted = awake && (distToPlayer < hearingDist || canSee);
 
     if (playerSpotted) {
       this.state = distToPlayer < 8.0 ? 'CHASE' : 'STALK';
@@ -130,21 +225,39 @@ export class EntityAI {
       dir.y = 0;
       if (dir.lengthSq() > 0.1) {
         dir.normalize();
-        entityPos.addScaledVector(dir, moveSpeed * delta);
+        const before = this._before.copy(entityPos);
+        this.moveWithWalls(entityPos, dir, moveSpeed * delta);
         speedNow = moveSpeed;
+        // A patrol point inside furniture can never be reached: skip it after being stuck for a few seconds
+        const hunting = this.state === 'CHASE' || this.state === 'STALK';
+        if (!hunting && before.distanceTo(entityPos) < moveSpeed * delta * 0.2) {
+          this.stuck += delta;
+          if (this.stuck > 2.5) {
+            this.stuck = 0;
+            this.currentPatrolIdx = (this.currentPatrolIdx + 1) % this.patrolPoints.length;
+          }
+        } else {
+          this.stuck = 0;
+        }
         this.mesh.rotation.y = lerpAngle(this.mesh.rotation.y, Math.atan2(dir.x, dir.z), delta * 5.0);
       }
     }
 
     this.animate(delta, speedNow);
 
-    // Catch check
-    if (distToPlayer < 1.15) return 'CAUGHT';
+    // Catch check: it must be hunting and stay in reach briefly, so the player can still slip away
+    if (this.state === 'CHASE' && distToPlayer < 1.15) {
+      this.grabTimer += delta;
+      if (this.grabTimer > 0.6) return 'CAUGHT';
+    } else {
+      this.grabTimer = 0;
+    }
     return null;
   }
 
   // Procedural animation. Dormant idles with a slow twitch; chase lunges, crawls and opens the jaw.
   animate(delta, speed) {
+    if (this.rig) { this.animateRig(delta, speed); return; }
     const ud = this.mesh.userData;
     const t = this.animTime;
     const chase = this.state === 'CHASE';

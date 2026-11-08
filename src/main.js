@@ -51,6 +51,8 @@ export class LostFootageGame {
     this.scene.add(this.player.yawObject);
 
     this.entity = new EntityAI(this.scene, this.player);
+    this.entity.world = this.world;
+    this.entity.loadRig();
 
     this.ui = new UIManager(this);
     this.story = new StoryManager(this.ui);
@@ -265,10 +267,10 @@ export class LostFootageGame {
   showStealthBriefing() {
     this.clearBriefing();
     const lines = [
-      'SUBJECT 407 IS AWAKE. IT HUNTS BY SOUND AND LIGHT.',
-      'WALK [no Shift] OR CROUCH [C]. RUNNING IS HEARD FROM 15m.',
+      'SUBJECT 407 IS AWAKE. IT CANNOT DETECT YOU FOR 20 SECONDS.',
+      'THEN IT HUNTS BY SOUND AND LIGHT. WALK OR CROUCH [C] TO STAY QUIET.',
       'FLASHLIGHT OFF [F] NEAR IT. ITS BEAM IS SEEN FROM 12m.',
-      'STAY OVER 8m AWAY. CLOSER THAN THAT AND IT CHASES YOU.'
+      'IT CHASES WITHIN 8m. IF IT REACHES YOU, MOVE AWAY AT ONCE.'
     ];
     lines.forEach((line, i) => {
       this.briefingTimers.push(setTimeout(() => this.ui.showBannerNotification(line), 5000 + i * 4800));
