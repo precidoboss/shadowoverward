@@ -86,11 +86,11 @@ export const TAPES_DATABASE = {
 };
 
 const QUICK_OBJECTIVES = [
-  { text: 'Take the service rifle from the reception desk', target: { x: -3.5, z: 12.5 }, locationName: 'RECEPTION DESK' },
-  { text: 'Put down the infected staff in the reception', target: { x: 0.0, z: 7.0 }, locationName: 'RECEPTION' },
-  { text: 'Take the high-voltage fuse by the doorway', target: { x: 4.5, z: 3.2 }, locationName: 'DOORWAY' },
-  { text: 'Restore power at the generator in the morgue', target: { x: -4.8, z: -9.5 }, locationName: 'MORGUE GENERATOR' },
-  { text: 'Destroy Shadow 47, then take the fire exit', target: { x: 0.0, z: -11.5 }, locationName: 'FIRE EXIT' }
+  { text: 'Take the service rifle in the north hall', target: { x: -4.5, z: -4.5 }, locationName: 'NORTH HALL' },
+  { text: 'Put down the infected staff in the halls', target: { x: -8.0, z: -2.1 }, locationName: 'WEST HALLS' },
+  { text: 'Take the high-voltage fuse in the bedroom', target: { x: -14.2, z: 4.9 }, locationName: 'BEDROOM' },
+  { text: 'Restore power at the generator, south end', target: { x: -5.4, z: 7.9 }, locationName: 'GENERATOR' },
+  { text: 'Destroy Shadow 47, then take the fire exit', target: { x: -3.7, z: 8.3 }, locationName: 'FIRE EXIT' }
 ];
 
 export class StoryManager {

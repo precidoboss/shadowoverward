@@ -878,3 +878,18 @@ canvas {
 .vitals-bar-fill.boss { background: #ff5533; }
 .weapon-status { font-size: 20px; text-align: center; text-shadow: 0 0 6px #000; }
 .boss-bar.hidden { display: none; }
+
+/* Hit marker: four ticks around the crosshair that flash when a shot or punch lands */
+#hitmarker {
+  position: fixed; left: 50%; top: 50%; width: 34px; height: 34px;
+  margin: -17px 0 0 -17px; pointer-events: none; opacity: 0; z-index: 30;
+  transition: opacity 0.06s linear;
+}
+#hitmarker.on { opacity: 1; }
+#hitmarker i { position: absolute; width: 10px; height: 2px; background: #fff; box-shadow: 0 0 4px #000; }
+#hitmarker i:nth-child(1) { left: 0; top: 4px; transform: rotate(45deg); }
+#hitmarker i:nth-child(2) { right: 0; top: 4px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(3) { left: 0; bottom: 4px; transform: rotate(-45deg); }
+#hitmarker i:nth-child(4) { right: 0; bottom: 4px; transform: rotate(45deg); }
+#hitmarker.kill i { background: #ff2a2a; width: 13px; height: 3px; }
+#crosshair.kick { transform: translate(-50%, -50%) scale(1.5); }

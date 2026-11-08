@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { modelFactory } from './models.js';
 import { soundEngine } from './audio.js';
+import { CombatFX, haptic } from './effects.js';
 
 export const RIFLE_DAMAGE = 2;
 export const PUNCH_DAMAGE = 1;
@@ -90,6 +91,7 @@ export class WeaponSystem {
     this._to = new THREE.Vector3();
     this._hit = new THREE.Vector3();
     this._hand = new THREE.Vector3();
+    this._v = new THREE.Vector3();
     this._handQ = new THREE.Quaternion();
     this.raycaster = new THREE.Raycaster();
     this.hand = null;
@@ -104,6 +106,18 @@ export class WeaponSystem {
     this.gunTP = buildRifleMesh();
     this.gunTP.visible = false;
     this.game.scene.add(this.gunTP);
+
+    // Effects: blood, damage numbers, sparks, hit marker. The muzzle light always exists (intensity 0 when idle)
+    // so firing never changes the light count and never forces a shader recompile.
+    this.fx = new CombatFX(this.game.scene, this.game.container);
+    this.muzzleLight = new THREE.PointLight(0xffaa55, 0, 9);
+    this.game.scene.add(this.muzzleLight);
+    this.muzzleTimer = 0;
+    this.kick = 0;            // gun kick-back, 0..1
+    this.pendingRecover = 0;  // camera pitch that eases back down after a shot
+    this._dir = new THREE.Vector3();
+    this._point = new THREE.Vector3();
+    this._crosshair = document.getElementById('crosshair');
   }
 
   acquireRifle(rounds) {
@@ -136,6 +150,9 @@ export class WeaponSystem {
     this.punchTimer = -1;
     this.flashTimer = 0;
     this.player.armed = false;
+    this.muzzleLight.intensity = 0;
+    this.pendingRecover = 0;
+    this.fx.clear();
   }
 
   get label() {
@@ -163,6 +180,7 @@ export class WeaponSystem {
     this.punchCooldown = PUNCH_COOLDOWN;
     this.punchTimer = PUNCH_HIT_AT;
     this.player.playPunch();
+    soundEngine.playPunchSwing();
   }
 
   // Strikes whatever stands in front, within reach
@@ -176,8 +194,13 @@ export class WeaponSystem {
       const d = to.length();
       if (d > PUNCH_RANGE || d < 0.01) continue;
       if (fwd.dot(to.multiplyScalar(1 / d)) < 0.4) continue;
-      this.damage(t, PUNCH_DAMAGE);
-      soundEngine.playDoorCreak(false);
+      // Blood from the chest, thrown away from the investigator
+      const dir = this._dir.set(to.x, 0, to.z).normalize();
+      const point = this._point.set(tp.x - dir.x * 0.25, 1.35, tp.z - dir.z * 0.25);
+      this.damage(t, PUNCH_DAMAGE, point, dir, false);
+      soundEngine.playPunchImpact();
+      this.player.addShake(0.045);
+      haptic(80, 1.0, 0.7);
       return;
     }
   }
@@ -186,7 +209,8 @@ export class WeaponSystem {
     if (this.fireCooldown > 0) return;
     if (this.ammo <= 0) {
       this.fireCooldown = 0.5;
-      soundEngine.playLockedDoor();
+      soundEngine.playGunDry();
+      haptic(25, 0.2, 0.3);
       this.game.ui.showBannerNotification('OUT OF AMMO.\nFIND RIFLE AMMO BOXES.');
       return;
     }
@@ -195,8 +219,9 @@ export class WeaponSystem {
     this.flashTimer = FLASH_TIME;
     this.gunFP.userData.flash.visible = true;
     this.gunTP.userData.flash.visible = true;
-    soundEngine.playStaticBurst(0.12);
+    soundEngine.playGunshot();
     this.player.playFire();
+    this.muzzleFlash();
 
     // Ray from the crosshair. Walls stop the shot before any target behind them.
     this.raycaster.setFromCamera(this._center, this.player.camera);
@@ -217,11 +242,59 @@ export class WeaponSystem {
       const d = ray.origin.distanceTo(this._hit);
       if (d < best && d < 40) { best = d; target = t; }
     }
-    if (target) this.damage(target, RIFLE_DAMAGE);
+    const dir = this._dir.copy(ray.direction);
+    dir.y = 0;
+    dir.normalize();
+    if (target) {
+      const point = this._point.copy(ray.origin).addScaledVector(ray.direction, best);
+      this.damage(target, RIFLE_DAMAGE, point, dir, true);
+      soundEngine.playHitConfirm(false);
+    } else if (best < 60) {
+      // Bullet strikes a wall: sparks and a puff of dust
+      const point = this._point.copy(ray.origin).addScaledVector(ray.direction, Math.max(0, best - 0.05));
+      this.fx.sparks(point, dir);
+    }
   }
 
-  damage(target, amount) {
+  // Muzzle flash, light, gun kick, camera recoil, screen shake and vibration
+  muzzleFlash() {
+    const tp = this.player.viewMode === 'THIRD_PERSON';
+    const gun = tp ? this.gunTP : this.gunFP;
+    const flash = gun.userData.flash;
+    flash.scale.setScalar(0.8 + Math.random() * 0.7);
+    flash.rotation.z = Math.random() * Math.PI;
+    flash.getWorldPosition(this.muzzleLight.position);
+    this.muzzleLight.intensity = 7;
+    this.muzzleTimer = 0.06;
+    this.kick = 1;
+    // Camera climbs a little and settles back
+    const climb = 0.022 + Math.random() * 0.008;
+    this.player.pitchObject.rotation.x = Math.min(1.45, this.player.pitchObject.rotation.x + climb);
+    this.player.yawObject.rotation.y += (Math.random() - 0.5) * 0.008;
+    this.pendingRecover += climb * 0.7;
+    this.player.addShake(0.035);
+    haptic(55, 0.9, 0.6);
+    if (this._crosshair) {
+      this._crosshair.classList.add('kick');
+      setTimeout(() => this._crosshair && this._crosshair.classList.remove('kick'), 90);
+    }
+  }
+
+  // Applies a hit and plays everything that goes with it: blood, number, marker and a body stain on a kill
+  damage(target, amount, point, dir, rifle = false) {
     const killed = target.takeHit ? target.takeHit(amount) : false;
+    const at = point || this._point.set(0, 1.2, 0);
+    const way = dir || this._dir.set(0, 0, 0);
+    this.fx.blood(at, way, killed ? 30 : (rifle ? 16 : 11), rifle ? 4.2 : 2.8);
+    this.fx.damageNumber(this._v.set(at.x, at.y + 0.5, at.z), amount, { kill: killed, rifle });
+    this.fx.hitMarker(killed);
+    soundEngine.playBloodSplat(rifle ? 1 : 0.6);
+    if (killed) {
+      const tp = target.group ? target.group.position : target.mesh.position;
+      this.fx.pool(tp.x, tp.z);
+      soundEngine.playHitConfirm(true);
+      haptic(140, 1.0, 1.0);
+    }
     if (target.group) {
       // Infected staff
       if (killed) this.game.ui.showBannerNotification('INFECTED STAFF DOWN.');
@@ -233,6 +306,21 @@ export class WeaponSystem {
   }
 
   update(delta) {
+    this.fx.update(delta);
+    if (this.muzzleTimer > 0) {
+      this.muzzleTimer -= delta;
+      if (this.muzzleTimer <= 0) this.muzzleLight.intensity = 0;
+    }
+    // Camera settles back after each shot
+    if (this.pendingRecover > 0) {
+      const r = Math.min(this.pendingRecover, delta * 0.18);
+      this.player.pitchObject.rotation.x -= r;
+      this.pendingRecover -= r;
+    }
+    // First-person rifle snaps back and returns
+    this.kick = Math.max(0, this.kick - delta * 9);
+    this.gunFP.position.set(0.22, -0.2 + this.kick * 0.015, -0.42 + this.kick * 0.09);
+    this.gunFP.rotation.x = this.kick * 0.14;
     this.fireCooldown = Math.max(0, this.fireCooldown - delta);
     this.punchCooldown = Math.max(0, this.punchCooldown - delta);
     if (this.punchTimer >= 0) {

@@ -14,6 +14,17 @@ export class Player {
     // Camera view mode: 'FIRST_PERSON' or 'THIRD_PERSON'
     this.viewMode = 'FIRST_PERSON';
 
+    // Camera rig: shake from shots and punches, and wall avoidance for the third-person view
+    this.shake = 0;
+    this.camRatio = 1;                       // how much of the full third-person distance is free
+    this._camDesired = new THREE.Vector3();
+    this._camPivot = new THREE.Vector3();
+    this._camTarget = new THREE.Vector3();
+    this._camRay = new THREE.Ray();
+    this._camHit = new THREE.Vector3();
+    this._camRight = new THREE.Vector3();
+    this._camUp = new THREE.Vector3();
+
     // Rigs
     this.pitchObject = new THREE.Object3D();
     this.yawObject = new THREE.Object3D();
@@ -548,6 +559,72 @@ export class Player {
     return this.nightVision;
   }
 
+  addShake(amount) {
+    this.shake = Math.min(0.12, this.shake + amount);
+  }
+
+  // Third-person camera: pulled in so it never ends up inside or behind a wall, floor or ceiling.
+  // Several rays are cast so a wall beside the camera also counts, not just the one straight behind.
+  updateCameraRig(delta) {
+    const shaking = this.shake > 0.001;
+    const sx = shaking ? (Math.random() - 0.5) * this.shake : 0;
+    const sy = shaking ? (Math.random() - 0.5) * this.shake : 0;
+    this.shake *= Math.exp(-delta * 14);
+
+    if (this.viewMode !== 'THIRD_PERSON') {
+      this.camera.position.set(sx, sy, 0);
+      this.camRatio = 1;
+      return;
+    }
+
+    const desiredLocal = this._camDesired.set(0.65, 0.25, 2.3);
+    this.eyeContainer.updateWorldMatrix(true, false);
+    const m = this.eyeContainer.matrixWorld;
+    const pivot = this._camPivot.setFromMatrixPosition(m);
+    const target = this._camTarget.copy(desiredLocal).applyMatrix4(m);
+    const full = target.clone().sub(pivot);
+    const fullLen = full.length();
+    this._camRight.set(m.elements[0], m.elements[1], m.elements[2]).normalize();
+    this._camUp.set(m.elements[4], m.elements[5], m.elements[6]).normalize();
+
+    const margin = 0.35;
+    let ratio = 1;
+    const cols = this.world ? this.world.colliders : [];
+    const offsets = [[0, 0], [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25]];
+    for (const [ox, oy] of offsets) {
+      const end = this._camHit.copy(target)
+        .addScaledVector(this._camRight, ox).addScaledVector(this._camUp, oy);
+      const dir = end.sub(pivot);
+      const len = dir.length();
+      dir.multiplyScalar(1 / len);
+      this._camRay.set(pivot, dir);
+      let best = Infinity;
+      for (let i = 0; i < cols.length; i++) {
+        const hit = this._camRay.intersectBox(cols[i], this._camHit);
+        if (hit) best = Math.min(best, pivot.distanceTo(hit));
+      }
+      if (best < len + margin) ratio = Math.min(ratio, Math.max(0, (best - margin) / len));
+    }
+
+    // Floor and ceiling
+    const ceil = (this.world && this.world.ceilingHeight) || 3.0;
+    if (target.y < 0.25 && pivot.y > 0.25) ratio = Math.min(ratio, (pivot.y - 0.25) / (pivot.y - target.y));
+    if (target.y > ceil - 0.2 && pivot.y < ceil - 0.2) ratio = Math.min(ratio, (ceil - 0.2 - pivot.y) / (target.y - pivot.y));
+    ratio = Math.max(0, Math.min(1, ratio));
+
+    // Snap inward at once (never clip), ease back out
+    if (ratio < this.camRatio) this.camRatio = ratio;
+    else this.camRatio += (ratio - this.camRatio) * Math.min(1, delta * 5);
+
+    this.camera.position.copy(desiredLocal).multiplyScalar(this.camRatio);
+    this.camera.position.x += sx;
+    this.camera.position.y += sy;
+
+    // Very close to a wall the camera sits inside the character: hide it rather than show the inside of the model
+    if (this.rig) this.rig.root.visible = fullLen * this.camRatio > 0.7;
+    this.charHead.visible = fullLen * this.camRatio > 0.7;
+  }
+
   toggleViewPerspective() {
     this.viewMode = this.viewMode === 'FIRST_PERSON' ? 'THIRD_PERSON' : 'FIRST_PERSON';
     this.updateViewPerspective();
@@ -856,6 +933,7 @@ export class Player {
       this.fpsEquip.rotation.set(0, 0, 0);
     }
 
+    this.updateCameraRig(delta);
     this.updateInteraction(delta);
   }
 

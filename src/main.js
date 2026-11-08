@@ -7,7 +7,7 @@ import { StoryManager } from './story.js';
 import { UIManager } from './ui.js';
 import { soundEngine } from './audio.js';
 import { Mutant, loadMutantTemplate, MUTANT_SPAWNS, ATTACK_DAMAGE } from './mutant.js';
-import { QuickWorld } from './quick-world.js';
+import { QuickWorld, preloadQuickModels } from './quick-world.js';
 import { WeaponSystem, createPickup } from './weapons.js';
 import { SpookyLighting } from './spooky-lighting.js';
 import { findFreeSpot } from './collision.js';
@@ -15,9 +15,9 @@ import { findFreeSpot } from './collision.js';
 // The loading screen stays up at least this long, so the wait reads as deliberate
 const MIN_LOADING_MS = 5000;
 const BOSS_HIT_DAMAGE = 35;
-const QUICK_MUTANT_SPAWNS = [[-2.5, 7.5], [3, 6.5]];
+const QUICK_MUTANT_SPAWNS = [[-8, -2.1], [-9, 5]];
 const FULL_START = { x: 0, z: 19 };
-const QUICK_START = { x: 0, z: 12.5 };
+const QUICK_START = { x: -4.5, z: -7 };
 
 export class LostFootageGame {
   constructor() {
@@ -171,8 +171,8 @@ export class LostFootageGame {
   // Where Subject 407 waits and patrols for each map
   placeLevelActors() {
     if (this.levelKind === 'quick') {
-      this.entity.spawnPos.set(3, 0, -8.5);
-      this.entity.patrolPoints = [new THREE.Vector3(3, 0, -8.5), new THREE.Vector3(-2.5, 0, -2.8)];
+      this.entity.spawnPos.set(-4.5, 0, 6.2);
+      this.entity.patrolPoints = [new THREE.Vector3(-4.5, 0, 6.2), new THREE.Vector3(-4.5, 0, 1.5)];
     } else {
       this.entity.spawnPos.copy(this.fullSpawn);
       this.entity.patrolPoints = this.fullPatrol.slice();
@@ -217,7 +217,7 @@ export class LostFootageGame {
 
   spawnPickups() {
     const spots = this.levelKind === 'quick'
-      ? [{ type: 'rifle', x: -3.5, z: 12.5 }, { type: 'fuse', x: 4.5, z: 3.2 }, { type: 'ammo', x: 4.5, z: -2.0 }]
+      ? [{ type: 'rifle', x: -4.5, z: -4.5 }, { type: 'fuse', x: -14.2, z: 4.9 }, { type: 'ammo', x: -9, z: -2.1 }]
       : [{ type: 'rifle', x: -2.5, z: 16.5 }, { type: 'ammo', x: 15.0, z: 4.0 }, { type: 'ammo', x: 1.5, z: -24.0 }];
     for (const s of spots) createPickup(this, s.type, findFreeSpot(this.world, s.x, s.z, 0.3));
   }
@@ -236,6 +236,7 @@ export class LostFootageGame {
     this.state = 'PLAYING';
     soundEngine.init();
     soundEngine.ensureContext();
+    soundEngine.startMusic();
     // Compile shaders up front so the first use of a material doesn't stall play
     this.renderer.compile(this.scene, this.camera);
     this.ui.hideMainMenu();
@@ -246,6 +247,7 @@ export class LostFootageGame {
 
   pauseGame() {
     this.state = 'PAUSED';
+    soundEngine.pauseMusic();
     document.exitPointerLock();
     this.ui.showPauseMenu();
   }
@@ -253,6 +255,7 @@ export class LostFootageGame {
   resumeGame() {
     this.state = 'PLAYING';
     soundEngine.ensureContext();
+    soundEngine.startMusic();
     this.ui.hidePauseMenu();
     this.requestPointerLock();
   }
@@ -504,12 +507,14 @@ export class LostFootageGame {
 
   triggerGameOver() {
     this.state = 'GAMEOVER';
+    soundEngine.stopMusic();
     document.exitPointerLock();
     this.ui.showGameOver();
   }
 
   triggerVictory() {
     this.state = 'VICTORY';
+    soundEngine.stopMusic();
     document.exitPointerLock();
 
     const mins = Math.floor(this.gameTime / 60);
@@ -693,5 +698,6 @@ export class LostFootageGame {
 
 // Instantiate game on page load
 window.addEventListener('DOMContentLoaded', () => {
+  preloadQuickModels();
   new LostFootageGame();
 });

@@ -50,6 +50,7 @@ export class SoundEngine {
   }
 
   ensureContext() {
+    if (this.musicWanted && this.music && this.music.paused) this.music.play().catch(() => {});
     if (!this.initialized || !this.ctx) {
       this.init();
       return;
@@ -69,6 +70,7 @@ export class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
     }
+    this.applyMusicVolume();
   }
 
   // 1. Audible Camcorder Startup Electronic Beep
@@ -673,6 +675,187 @@ export class SoundEngine {
         this.playStaticBurst(dur * 0.35);
       }, item.delay);
     });
+  }
+
+  // ---------- Music ----------
+  // "Behind The Closed Door" loops under the whole run. It plays through an <audio> element so the 4 MB
+  // file streams instead of being decoded up front. Relative URL, so it also works from an itch.io iframe.
+  startMusic() {
+    if (!this.music) {
+      this.music = new Audio('audio/behind-the-closed-door.mp3');
+      this.music.loop = true;
+      this.music.preload = 'auto';
+    }
+    this.musicWanted = true;
+    this.applyMusicVolume();
+    const p = this.music.play();
+    if (p && p.catch) p.catch(() => { /* blocked until the next click; ensureContext retries */ });
+  }
+
+  pauseMusic() {
+    this.musicWanted = false;
+    if (this.music) this.music.pause();
+  }
+
+  stopMusic() {
+    this.musicWanted = false;
+    if (this.music) {
+      this.music.pause();
+      this.music.currentTime = 0;
+    }
+  }
+
+  // Music sits under the effects so gunshots and footsteps stay clear
+  applyMusicVolume() {
+    if (this.music) this.music.volume = this.isMuted ? 0 : Math.min(1, this.volume * 0.5);
+  }
+
+  // ---------- Combat sounds ----------
+  _noise(dur) {
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    return src;
+  }
+
+  // Rifle shot in four layers: sharp crack, noise body, low thump, and a short echo tail
+  playGunshot() {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const out = this.ctx.createGain();
+    out.gain.value = 1.0;
+    out.connect(this.masterGain);
+
+    // Echo tail
+    const delay = this.ctx.createDelay(0.5);
+    delay.delayTime.value = 0.13;
+    const fb = this.ctx.createGain();
+    fb.gain.value = 0.32;
+    const tone = this.ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = 1400;
+    out.connect(delay); delay.connect(tone); tone.connect(fb); fb.connect(delay); tone.connect(this.masterGain);
+
+    // 1. Crack: short, bright noise
+    const crack = this._noise(0.08);
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 2200;
+    const cg = this.ctx.createGain();
+    cg.gain.setValueAtTime(1.0, t);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    crack.connect(hp); hp.connect(cg); cg.connect(out);
+    crack.start(t);
+
+    // 2. Body: noise through a falling low-pass
+    const body = this._noise(0.35);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(5200, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + 0.3);
+    const bg = this.ctx.createGain();
+    bg.gain.setValueAtTime(0.9, t);
+    bg.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+    body.connect(lp); lp.connect(bg); bg.connect(out);
+    body.start(t);
+
+    // 3. Thump: a sine that drops fast
+    const osc = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(170, t);
+    osc.frequency.exponentialRampToValueAtTime(38, t + 0.18);
+    og.gain.setValueAtTime(1.1, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc.connect(og); og.connect(out);
+    osc.start(t); osc.stop(t + 0.25);
+  }
+
+  // Empty chamber: a dry metal click
+  playGunDry() {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1900, t);
+    osc.frequency.exponentialRampToValueAtTime(700, t + 0.04);
+    g.gain.setValueAtTime(0.25, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    osc.connect(g); g.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.08);
+  }
+
+  // Fist through the air
+  playPunchSwing() {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const n = this._noise(0.25);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t);
+    bp.frequency.exponentialRampToValueAtTime(2200, t + 0.16);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.35, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    n.connect(bp); bp.connect(g); g.connect(this.masterGain);
+    n.start(t);
+  }
+
+  // Fist on flesh: low thud plus a wet slap
+  playPunchImpact() {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const og = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+    og.gain.setValueAtTime(1.0, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc.connect(og); og.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.2);
+    this.playBloodSplat(0.5);
+  }
+
+  // Wet, short burst used for every hit that draws blood
+  playBloodSplat(level = 1) {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const n = this._noise(0.18);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 0.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.5 * level, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    n.connect(bp); bp.connect(g); g.connect(this.masterGain);
+    n.start(t);
+  }
+
+  // Small tick that confirms a hit landed
+  playHitConfirm(kill = false) {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(kill ? 520 : 880, t);
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + (kill ? 0.22 : 0.07));
+    osc.connect(g); g.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.25);
   }
 }
 

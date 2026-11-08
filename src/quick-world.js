@@ -1,24 +1,70 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { World } from './world.js';
 import { modelFactory } from './models.js';
+import { CORRIDOR_BOXES } from './corridor-data.js';
 
-// The quick run: two rooms joined by one doorway. Reception (north) holds the rifle, the fuse and
-// two infected staff. The morgue (south) holds the generator and the fire exit, and Shadow 47.
+// The quick run now plays inside the horror corridor model. Two areas matter:
+//  - the north end and central hall, where the run starts and the rifle waits
+//  - the west bedroom (the bed model), with the generator and fire exit at the south end
+// Walls come from CORRIDOR_BOXES (generated from the model), so the player collides with what they see.
 // It extends World so every system that reads world.colliders, interactables and lights works unchanged.
 // The parent constructor calls these build steps, so overriding them here replaces the sanatorium.
+
+// The model's floor sits at y = 2.52; shifting it down puts the floor at y = 0
+const CORRIDOR_FLOOR_Y = 2.52;
+export const BED_SPOT = { x: -14.2, z: 1.8 };
+
+const loader = new GLTFLoader();
+const cache = {};
+// Loaded once, cloned per run, so restarting the quick run never downloads the models again
+function loadModel(url) {
+  if (!cache[url]) {
+    cache[url] = new Promise((resolve, reject) => {
+      loader.load(url, gltf => resolve(gltf.scene), undefined, reject);
+    });
+  }
+  return cache[url];
+}
+
+// Start fetching as soon as this file loads, so the models are usually ready before Play is pressed
+export function preloadQuickModels() {
+  loadModel('models/corridor.glb').catch(() => {});
+  loadModel('models/bed.glb').catch(() => {});
+}
+
 export class QuickWorld extends World {
   buildSanatorium() {
-    const m = this.mats;
-    const H = 3.2;
-    const y = H / 2;
-    // Outer walls (reception z 2..14, morgue z -12..2, x -6..6)
-    this.createWall(0, y, 14.15, 12.6, H, 0.3, m.wall);
-    this.createWall(0, y, -12.15, 12.6, H, 0.3, m.wall);
-    this.createWall(-6.15, y, 1, 0.3, H, 26.6, m.wall);
-    this.createWall(6.15, y, 1, 0.3, H, 26.6, m.wall);
-    // Dividing wall with a 2.4m doorway at x -1.2..1.2
-    this.createWall(-3.6, y, 2, 4.8, H, 0.3, m.wall);
-    this.createWall(3.6, y, 2, 4.8, H, 0.3, m.wall);
+    // Invisible walls that match the model
+    for (const [x0, z0, x1, z1] of CORRIDOR_BOXES) {
+      this.colliders.push(new THREE.Box3(new THREE.Vector3(x0, 0, z0), new THREE.Vector3(x1, 4.2, z1)));
+    }
+    this.ceilingHeight = 4.1;
+
+    // Corridor model
+    loadModel('models/corridor.glb').then(src => {
+      const corridor = src.clone(true);
+      corridor.position.y = -CORRIDOR_FLOOR_Y;
+      corridor.traverse(o => {
+        if (o.isMesh && o.material) {
+          o.material = o.material.clone();
+          o.material.side = THREE.DoubleSide;
+        }
+      });
+      this.scene.add(corridor);
+    }).catch(err => console.warn('Corridor model failed to load', err));
+
+    // Bed in the west bedroom. The model ships with its own floor square, which is dropped.
+    loadModel('models/bed.glb').then(src => {
+      const bed = src.clone(true);
+      const floors = [];
+      bed.traverse(o => { if (o.name === 'Floor_Floor_0' || o.name === 'Floor') floors.push(o); });
+      floors.forEach(f => f.parent && f.parent.remove(f));
+      bed.rotation.y = Math.PI / 2;
+      bed.position.set(BED_SPOT.x, 0, BED_SPOT.z);
+      this.scene.add(bed);
+    }).catch(err => console.warn('Bed model failed to load', err));
+    this.addCollider(BED_SPOT.x, 0.4, BED_SPOT.z, 1.2, 0.8, 2.3);
   }
 
   buildGrounds() {}
@@ -27,44 +73,25 @@ export class QuickWorld extends World {
 
   buildPropsAndPuzzles() {
     const m = this.mats;
-    this.addFloor(12, 12, 0, 8, m.tile);
-    this.addFloor(12, 14, 0, -5, m.concrete);
 
-    // Reception desk
-    const deskMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2a, roughness: 0.7 });
-    const desk = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 0.8), deskMat);
-    desk.position.set(3.6, 0.5, 11);
-    desk.castShadow = true;
-    this.scene.add(desk);
-    this.addCollider(3.6, 0.5, 11, 2.2, 1.0, 0.8);
-
-    // Morgue tables (cover)
-    for (const [x, z] of [[-3.5, -4], [3.5, -5.5]]) {
-      const table = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.9, 1.0), m.steel);
-      table.position.set(x, 0.45, z);
-      table.castShadow = true;
-      this.scene.add(table);
-      this.addCollider(x, 0.45, z, 2.0, 0.9, 1.0);
-    }
-
-    // Generator with a status LED. Restoring power turns the LED green.
+    // Generator against the south end, with a status LED. Restoring power turns the LED green.
     const genMat = new THREE.MeshStandardMaterial({ color: 0x33302b, roughness: 0.6, metalness: 0.5 });
     const gen = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.8, 0.5), genMat);
-    gen.position.set(-4.8, 0.9, -9.5);
+    gen.position.set(-5.4, 0.9, 7.9);
     gen.castShadow = true;
     const led = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
-    led.position.set(-4.8, 1.6, -9.22);
+    led.position.set(-5.4, 1.6, 7.62);
     const genGroup = new THREE.Group();
     genGroup.add(gen, led);
     genGroup.userData = { isInteractable: true, type: 'generator', hasFuse: false, isPowered: false, led };
     this.scene.add(genGroup);
     this.interactables.push(genGroup);
-    this.addCollider(-4.8, 0.9, -9.5, 1.0, 1.8, 0.5);
+    this.addCollider(-5.4, 0.9, 7.9, 1.0, 1.8, 0.5);
 
     // Fire exit in the south wall. It opens only after power is restored and Shadow 47 is stopped.
     const exitMat = new THREE.MeshStandardMaterial({ color: 0x2f4a33, roughness: 0.5, metalness: 0.3 });
     const exit = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.3, 0.15), exitMat);
-    exit.position.set(0, 1.15, -11.8);
+    exit.position.set(-3.7, 1.15, 8.3);
     exit.castShadow = true;
     const exitGroup = new THREE.Group();
     exitGroup.add(exit);
@@ -75,23 +102,23 @@ export class QuickWorld extends World {
     this.scene.add(exitGroup);
     this.interactables.push(exitGroup);
     const glow = modelFactory.makeGlow(0x66ff88, 0.7);
-    glow.position.set(0, 2.5, -11.5);
+    glow.position.set(-3.7, 2.5, 7.9);
     this.scene.add(glow);
   }
 
   setupAtmosphere() {
-    this.scene.add(new THREE.AmbientLight(0x405565, 1.2));
-    const reception = new THREE.PointLight(0xffcc88, 2.0, 12);
-    reception.position.set(0, 2.8, 9);
-    this.scene.add(reception);
-    this.addFlicker(reception);
-    const morgue = new THREE.PointLight(0x77bbff, 2.0, 12);
-    morgue.position.set(-3, 2.8, -6);
-    this.scene.add(morgue);
-    this.addFlicker(morgue);
-    const red = new THREE.PointLight(0xff4444, 1.6, 10);
-    red.position.set(3, 2.8, -9);
-    this.scene.add(red);
-    this.addFlicker(red);
+    this.scene.add(new THREE.AmbientLight(0x405565, 1.4));
+    const lamps = [
+      [0xffcc88, -4.5, -5.5],   // start
+      [0xffcc88, -4.5, 0.5],    // central hall
+      [0x77bbff, -9, 5],        // west hallway toward the bedroom
+      [0xff4444, -4.5, 6.8]     // generator and exit
+    ];
+    for (const [color, x, z] of lamps) {
+      const light = new THREE.PointLight(color, 2.2, 11);
+      light.position.set(x, 3.4, z);
+      this.scene.add(light);
+      this.addFlicker(light);
+    }
   }
 }
