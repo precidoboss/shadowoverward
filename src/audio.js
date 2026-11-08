@@ -242,6 +242,37 @@ export class SoundEngine {
     });
   }
 
+  // Dial detent: a short metallic click as the combination passes a number
+  playDialClick() {
+    if (!this.ctx || this.isMuted) return;
+    this.ensureContext();
+    const t = this.ctx.currentTime;
+    const n = this._noise(0.03);
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2200;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    n.connect(hp);
+    hp.connect(g);
+    g.connect(this.masterGain);
+    n.start(t);
+    n.stop(t + 0.04);
+
+    const o = this.ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(2400, t);
+    o.frequency.exponentialRampToValueAtTime(1500, t + 0.02);
+    const og = this.ctx.createGain();
+    og.gain.setValueAtTime(0.18, t);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    o.connect(og);
+    og.connect(this.masterGain);
+    o.start(t);
+    o.stop(t + 0.05);
+  }
+
   // Infected groan: a low, wet moan with a rattle in the throat. Every call varies a little.
   playInfectedGroan(volume = 0.5) {
     if (!this.ctx || this.isMuted) return;

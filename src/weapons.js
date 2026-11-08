@@ -10,7 +10,7 @@ const PUNCH_RANGE = 2.0;
 const PUNCH_HIT_AT = 0.3;
 const PUNCH_COOLDOWN = 1.0;
 const FIRE_COOLDOWN = 0.4;
-const FLASH_TIME = 0.06;
+const FLASH_TIME = 0.5;   // the fire animation runs about 0.57 s
 
 const gunMetal = new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.5, metalness: 0.6 });
 const gunWood = new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 0.8 });
@@ -27,8 +27,40 @@ const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x3a4636, roughness: 0
 // With hands = true the gunner's gloves and sleeves are added too (first-person view only).
 // The service rifle: the uploaded cartoon rifle. Its barrel points along -Z with Y up, the usual forward.
 // Hands and third-person views centre it on the group. A pickup stands on `bottomY` (a table, or the floor).
+// The muzzle flame is the uploaded fire animation. It is scaled once to about half a metre across,
+// then every shot plays it from the muzzle. Its planes face forward along the barrel.
+function buildMuzzleFlame(gltf) {
+  const inner = tidy(gltf.scene.clone(true));
+  const clip = gltf.animations[0];
+  const mixer = new THREE.AnimationMixer(inner);
+  const action = mixer.clipAction(clip);
+  action.setLoop(THREE.LoopOnce, 1);
+  action.clampWhenFinished = false;
+  action.play();
+  mixer.setTime(clip.duration * 0.3);          // measure the flame at its fullest
+  const wrap = new THREE.Group();
+  wrap.add(inner);
+  wrap.rotation.x = Math.PI / 2;
+  const s = new THREE.Box3().setFromObject(wrap).getSize(new THREE.Vector3());
+  const size = 0.5 / (Math.max(s.x, s.y, s.z) || 1);
+  mixer.setTime(0);
+  action.stop();
+  wrap.scale.setScalar(0.0001);                // idle: effectively invisible, but still compiled
+  return { wrap, mixer, action, size };
+}
+
+// The service rifle: the uploaded cartoon rifle. Its barrel points along -Z with Y up, the usual forward.
+// Hands and third-person views centre it on the group. A pickup stands on `bottomY` (a table, or the floor).
 export function buildRifleMesh(hands = false, { length = hands ? 0.55 : 0.85, bottomY = null } = {}) {
   const g = new THREE.Group();
+
+  // Muzzle anchor at the front (-Z) end of the barrel. It exists at once, so firing never fails while loading.
+  const flash = new THREE.Group();
+  flash.position.set(0, 0.015, -length * 0.5 - 0.04);
+  flash.visible = true;
+  g.add(flash);
+  g.userData.flash = flash;
+
   loadGLB('models/rifle.glb').then(gltf => {
     const model = tidy(gltf.scene.clone(true));
     model.traverse(o => { if (o.isMesh) o.castShadow = !hands; });
@@ -37,6 +69,12 @@ export function buildRifleMesh(hands = false, { length = hands ? 0.55 : 0.85, bo
     if (bottomY !== null) standOn(g, g.position.x, bottomY, g.position.z, model);
     else centreInside(g, model);
   }).catch(err => console.warn('Rifle model failed to load', err));
+
+  loadGLB('models/muzzle_fire.glb').then(fg => {
+    const fx = buildMuzzleFlame(fg);
+    flash.add(fx.wrap);
+    g.userData.fx = fx;
+  }).catch(err => console.warn('Muzzle flame failed to load', err));
   return g;
 }
 
@@ -67,7 +105,7 @@ export function createPickup(game, type, spot) {
     group.add(fuse);
   } else group = buildAmmoBox();
   if (type === 'rifle') {
-    group.rotation.set(0, 0.6, 0);
+    group.rotation.set(0, spot.y !== undefined ? 0 : 0.6, 0);
     group.position.set(spot.x, spot.y ?? 0, spot.z);
   } else {
     group.position.set(spot.x, 0, spot.z);
@@ -225,6 +263,8 @@ export class WeaponSystem {
     this.flashTimer = FLASH_TIME;
     this.gunFP.userData.flash.visible = true;
     this.gunTP.userData.flash.visible = true;
+    this.playMuzzleFx(this.gunFP);
+    this.playMuzzleFx(this.gunTP);
     soundEngine.playGunshot();
     this.player.playFire();
     this.muzzleFlash();
@@ -260,6 +300,14 @@ export class WeaponSystem {
       const point = this._point.copy(ray.origin).addScaledVector(ray.direction, Math.max(0, best - 0.05));
       this.fx.sparks(point, dir);
     }
+  }
+
+  // Plays the uploaded fire animation at the muzzle of a gun
+  playMuzzleFx(gun) {
+    const fx = gun.userData.fx;
+    if (!fx) return;
+    fx.wrap.scale.setScalar(fx.size);
+    fx.action.reset().play();
   }
 
   // Muzzle flash, light, gun kick, camera recoil, screen shake and vibration
@@ -313,6 +361,9 @@ export class WeaponSystem {
 
   update(delta) {
     this.fx.update(delta);
+    for (const gun of [this.gunFP, this.gunTP]) {
+      if (gun.userData.fx) gun.userData.fx.mixer.update(delta);
+    }
     if (this.muzzleTimer > 0) {
       this.muzzleTimer -= delta;
       if (this.muzzleTimer <= 0) this.muzzleLight.intensity = 0;

@@ -532,8 +532,11 @@ export class UIManager {
   renderDial() {
     this.dialRing.style.transform = `rotate(${this.dialAngle}deg)`;
     const d = this.topDigit();
+    // A detent click each time the dial passes a number
+    if (this.dialLastDigit !== undefined && d !== this.dialLastDigit) soundEngine.playDialClick();
+    this.dialLastDigit = d;
     this.dialReadout.textContent = `DIGIT ${d}`;
-    if (this.game.turnSafeDial) this.game.turnSafeDial(d);
+    if (this.game.turnSafeDial) this.game.turnSafeDial(this.dialAngle);
   }
 
   renderSlots(color = '#22ee55') {
@@ -578,6 +581,7 @@ export class UIManager {
   // SAFE DIAL MODAL
   openSafeKeypad() {
     this.dialAngle = 0;
+    this.dialLastDigit = undefined;
     this.clearDial();
     this.safeKeypadModal.classList.remove('hidden');
     this.game.state = 'KEYPAD';

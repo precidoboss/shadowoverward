@@ -471,9 +471,9 @@ export class LostFootageGame {
   }
 
   // The rolled combination turns the brass dial on the safe
-  turnSafeDial(digit) {
+  turnSafeDial(degrees) {
     const safe = this.world.vaultSafe;
-    if (safe && safe.userData.dial) safe.userData.dial.rotation.z = -digit * Math.PI / 5;
+    if (safe && safe.userData.setDial) safe.userData.setDial(degrees);
   }
 
   // Directions for the last fight, shown in sequence once Subject 407 wakes.
@@ -498,7 +498,9 @@ export class LostFootageGame {
     if (safe && safe.userData) {
       safe.userData.isOpen = true;
       if (safe.userData.ledMesh) safe.userData.ledMesh.material.color.setHex(0x33ff55);
-      if (safe.userData.doorPivot) {
+      if (safe.userData.open) {
+        safe.userData.open();
+      } else if (safe.userData.doorPivot) {
         safe.userData.doorPivot.rotation.y = -Math.PI / 1.7;
       }
       soundEngine.playDoorCreak(true);

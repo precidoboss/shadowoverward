@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { modelFactory } from './models.js';
 import { CORRIDOR_BOXES } from './corridor-data.js';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import {
   loadGLB, tidy, sizeHeight, standOn, centreAt, makeHolder, buildHighVoltageFuse
 } from './props.js';
@@ -25,7 +26,7 @@ export const SAFE = { x: -15.04, y: 1.2, z: 4.6 };    // bedroom safe, against t
 export const GENERATOR = { x: -5.85, z: 7.5 };
 export const EXIT = { x: -3.9, z: 8.3 };              // airlock, on the back wall of the generator room
 // The service rifle lies on the autopsy table, beside the skelevision
-export const RIFLE_SPOT = { x: TABLE.x + 0.3, y: 0.99, z: TABLE.z };
+export const RIFLE_SPOT = { x: TABLE.x + 0.36, y: 0.99, z: TABLE.z };
 
 // The portal swirls once the airlock is open. Both shaders are plain GLSL.
 const PORTAL_VERT = `
@@ -36,6 +37,7 @@ const PORTAL_VERT = `
   }`;
 const PORTAL_FRAG = `
   uniform float uTime;
+  uniform float uAlpha;
   varying vec2 vUv;
   void main() {
     vec2 p = vUv * 2.0 - 1.0;
@@ -45,7 +47,7 @@ const PORTAL_FRAG = `
     float band = 0.5 + 0.5 * sin(swirl * 4.0);
     float edge = smoothstep(1.0, 0.55, r);
     vec3 col = mix(vec3(0.05, 0.85, 0.45), vec3(0.75, 1.0, 0.85), band);
-    float alpha = edge * (0.35 + 0.65 * band);
+    float alpha = uAlpha * edge * (0.35 + 0.65 * band);
     gl_FragColor = vec4(col * alpha, alpha);
   }`;
 
@@ -114,6 +116,7 @@ export class QuickWorld extends World {
     this.buildBedroomSafe();    // safe with the fuse inside
     this.buildGeneratorAndExit();
     this.buildDressing();       // props and paintings
+    this.buildTapes();          // the found footage
   }
 
   // ---------- Entrance: the autopsy table and the skelevision on it ----------
@@ -217,22 +220,22 @@ export class QuickWorld extends World {
     this.tvTexture.needsUpdate = true;
   }
 
-  // ---------- Bedroom: the uploaded safe, with the fuse inside ----------
+  // ---------- Bedroom: the rigged safe, with the fuse inside ----------
   buildBedroomSafe() {
     // The holder is an interactable straight away; the safe model fills it in once it has loaded
     const safe = makeHolder();
     safe.userData = {
       isInteractable: true, type: 'wall_safe', isOpen: false,
-      ledMesh: null, doorPivot: null, dial: null, interiorLight: new THREE.Object3D()
+      ledMesh: null, open: null, setDial: null, interiorLight: new THREE.Object3D()
     };
     this.scene.add(safe);
     this.interactables.push(safe);
     this.vaultSafe = safe;
-    this.addCollider(SAFE.x, SAFE.y, SAFE.z, 0.92, 0.8, 0.8);
+    this.addCollider(SAFE.x, SAFE.y, SAFE.z, 0.85, 0.85, 0.8);
 
     // The fuse is inside the safe: hidden until the dial opens it, then it can be taken
     const fuse = buildHighVoltageFuse();
-    fuse.position.set(SAFE.x + 0.62, SAFE.y - 0.05, SAFE.z);
+    fuse.position.set(SAFE.x + 0.56, SAFE.y - 0.05, SAFE.z);
     fuse.rotation.y = Math.PI / 2;
     fuse.visible = false;
     fuse.userData = { isInteractable: false, type: 'fuse', name: 'High-Voltage Fuse' };
@@ -241,56 +244,39 @@ export class QuickWorld extends World {
     safe.userData.fuse = fuse;
 
     loadGLB('models/safe.glb').then(gltf => {
-      const closed = gltf.scene.getObjectByName('Safe_Closed');
-      if (!closed) throw new Error('Safe_Closed not found in safe.glb');
-      const model = tidy(closed.clone(true));
-      model.updateWorldMatrix(true, true);
-
-      // The door is the plate whose front face is furthest forward (+Z). It hinges on its left edge.
-      let door = null;
-      let frontMost = -Infinity;
-      model.traverse(o => {
-        if (!o.isMesh) return;
-        const b = new THREE.Box3().setFromObject(o);
-        if (b.max.z > frontMost) { frontMost = b.max.z; door = o; }
-      });
-      const db = new THREE.Box3().setFromObject(door);
-      const hinge = new THREE.Vector3(db.min.x, (db.min.y + db.max.y) / 2, (db.min.z + db.max.z) / 2);
-      const pivot = makeHolder();
-      pivot.position.copy(hinge);
-      door.parent.remove(door);
-      pivot.add(door);
-      door.position.sub(hinge);
-      model.add(pivot);
-
-      // The brass dial on the door turns as the combination is rolled
-      const cx = (db.min.x + db.max.x) / 2;
-      const cy = (db.min.y + db.max.y) / 2;
-      const fz = db.max.z;
-      const dial = makeHolder();
-      dial.position.set(cx - hinge.x, cy - hinge.y, fz + 0.05 - hinge.z);
-      const brass = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: 0.3, metalness: 0.9 });
-      const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.35, 28), brass);
-      knob.rotation.x = Math.PI / 2;
-      dial.add(knob);
-      const notch = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-      notch.position.set(0, 0.6, 0.2);
-      dial.add(notch);
-      pivot.add(dial);
-
-      // Lock light, lit red until the dial opens the door
-      const ledMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
-      ledMesh.position.set(db.max.x - 1.2 - hinge.x, db.max.y - 1.0 - hinge.y, fz + 0.1 - hinge.z);
-      pivot.add(ledMesh);
-
-      model.scale.setScalar(0.142);          // the body is about 0.8 m wide
-      safe.rotation.y = Math.PI / 2;         // the door faces east, into the bedroom
+      // The safe is rigged, so it is cloned with its skeleton; a plain clone would lose the bones
+      const model = tidy(cloneSkeleton(gltf.scene));
+      sizeHeight(model, 0.85);
+      safe.rotation.y = Math.PI / 2;    // the door faces east, into the bedroom
       safe.add(model);
       centreAt(safe, SAFE.x, SAFE.y, SAFE.z, model);
 
-      safe.userData.ledMesh = ledMesh;
-      safe.userData.doorPivot = pivot;
-      safe.userData.dial = dial;
+      // Dial: the knob bone turns about its own shaft (its local Y) as the combination is rolled
+      const knob = model.getObjectByName('KnobBone_03');
+      if (knob) {
+        const rest = knob.quaternion.clone();
+        const shaft = new THREE.Vector3(0, 1, 0);
+        safe.userData.setDial = degrees => {
+          knob.quaternion.copy(rest).multiply(new THREE.Quaternion().setFromAxisAngle(shaft, -degrees * Math.PI / 180));
+        };
+      }
+
+      // Door: the rig's own opening animation, played once the combination is right
+      const clip = gltf.animations[0];
+      if (clip) {
+        this.safeMixer = new THREE.AnimationMixer(model);
+        const action = this.safeMixer.clipAction(clip);
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+        safe.userData.open = () => action.reset().play();
+      }
+
+      // Lock light on the front of the safe, lit red until it opens
+      const b = new THREE.Box3().setFromObject(model);
+      const led = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+      led.position.set(b.max.x + 0.01, b.max.y - 0.12, (b.min.z + b.max.z) / 2 + 0.2);
+      this.scene.add(led);
+      safe.userData.ledMesh = led;
     }).catch(err => console.warn('Safe model failed to load', err));
   }
 
@@ -341,7 +327,7 @@ export class QuickWorld extends World {
     this.portal = new THREE.Mesh(
       new THREE.PlaneGeometry(1.8, 2.2),
       new THREE.ShaderMaterial({
-        uniforms: { uTime: { value: 0 } },
+        uniforms: { uTime: { value: 0 }, uAlpha: { value: 0 } },
         vertexShader: PORTAL_VERT,
         fragmentShader: PORTAL_FRAG,
         transparent: true,
@@ -351,7 +337,6 @@ export class QuickWorld extends World {
       })
     );
     this.portal.position.set(EXIT.x, 1.15, EXIT.z);
-    this.portal.visible = false;
     this.scene.add(this.portal);
 
     loadGLB('models/airlock_door.glb').then(gltf => {
@@ -384,7 +369,22 @@ export class QuickWorld extends World {
     const i = this.colliders.indexOf(this.exitCollider);
     if (i >= 0) this.colliders.splice(i, 1);
     this.portalOpen = true;
-    if (this.portal) this.portal.visible = true;
+    if (this.portal) this.portal.material.uniforms.uAlpha.value = 1;
+  }
+
+  // The found footage: a tape on the autopsy table beside the skelevision, and one on the bedroom floor
+  buildTapes() {
+    const onTable = modelFactory.createVhsTape(4, 'Tape 04: The Final Log', 'OCT 31 1997');
+    onTable.position.set(TABLE.x - 0.36, RIFLE_SPOT.y + 0.03, TABLE.z);
+    onTable.rotation.y = Math.PI / 2;
+    this.scene.add(onTable);
+    this.interactables.push(onTable);
+
+    const onFloor = modelFactory.createVhsTape(2, 'Tape 02: The Transformation', 'OCT 18 1997');
+    onFloor.position.set(-13.6, 0.03, 5.9);
+    onFloor.rotation.y = 0.4;
+    this.scene.add(onFloor);
+    this.interactables.push(onFloor);
   }
 
   // True when the position (x, z) is close enough to the open portal to step through it
@@ -467,7 +467,8 @@ export class QuickWorld extends World {
       this.drawSkelevision(gameTime);
     }
     if (this.exitPlaying && this.exitMixer) this.exitMixer.update(delta);
-    if (this.portal && this.portal.visible) this.portal.material.uniforms.uTime.value = gameTime;
+    if (this.safeMixer) this.safeMixer.update(delta);
+    if (this.portal) this.portal.material.uniforms.uTime.value = gameTime;
     return moving;
   }
 }
