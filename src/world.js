@@ -521,8 +521,10 @@ export class World {
 
     // Safe contents: hidden until unlocked. They must also be in `interactables`,
     // otherwise the raycast can never reach them and the game cannot be completed.
+    // Placed in FRONT of the safe (world x 15.85). The safe body is solid, so anything
+    // inside it is unreachable even after the door opens.
     const tape3 = modelFactory.createVhsTape(3, 'Tape 03: Containment Breach', 'OCT 24 1997');
-    tape3.position.set(16.4, 1.55, 6.5);
+    tape3.position.set(15.85, 1.0, 6.6);
     tape3.visible = false;
     tape3.userData.isInteractable = false;
     this.scene.add(tape3);
@@ -530,7 +532,7 @@ export class World {
     safe.userData.tape3 = tape3;
 
     const morgueKey = modelFactory.createKeyItem('morgue_key', 'Morgue & Basement Key', 0x992222);
-    morgueKey.position.set(16.4, 1.55, 6.3);
+    morgueKey.position.set(15.85, 1.0, 6.3);
     morgueKey.visible = false;
     morgueKey.userData.isInteractable = false;
     this.scene.add(morgueKey);
