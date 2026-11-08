@@ -239,8 +239,7 @@ export class World {
     this.createWall(4.775, Y, 24, 6.95, H, 0.4, wallMat);
     this.createWall(8, Y, 18, 0.4, H, 12, wallMat);
     this.createWall(-8, Y, 18, 0.4, H, 12, wallMat);
-    this.createWall(-5.5, Y, 12, 5, H, 0.4, wallMat);
-    this.createWall(5.5, Y, 12, 5, H, 0.4, wallMat);
+    // (The lobby's north edge is the Ward A / office wall at z 12.5, so no duplicate wall is needed.)
 
     // Central corridor
     this.createWall(-3, Y, 8.5, 0.4, H, 7, wallMat);
@@ -253,12 +252,17 @@ export class World {
     this.createWall(3, Y, -9.5, 0.4, H, 6, wallMat);
     this.createWall(-2.2, Y, -14, 2.5, H, 0.4, wallMat);
     this.createWall(2.2, Y, -14, 2.5, H, 0.4, wallMat);
+    // Corner fills joining the corridor's side walls to the south wall
+    this.addSolidBlock(-3, Y, -13.15, 0.4, H, 1.3, wallMat);
+    this.addSolidBlock(3, Y, -13.15, 0.4, H, 1.3, wallMat);
 
     // Ward A
     this.createWall(-17, Y, 0, 0.4, H, 25, wallMat);
     this.createWall(-10, Y, 12.5, 14, H, 0.4, wallMat);
     this.createWall(-10, Y, -12.5, 14, H, 0.4, wallMat);
-    this.createWall(-10, Y, 0, 14, H, 0.4, wallMat);
+    // Archway between Room 101 and Room 102 (ECT room), 1.5 m wide, so the room is reachable
+    this.createWall(-13.875, Y, 0, 6.25, H, 0.4, wallMat);
+    this.createWall(-6.125, Y, 0, 6.25, H, 0.4, wallMat);
 
     // Dr. Holloway's office
     this.createWall(17, Y, 6, 0.4, H, 13, wallMat);

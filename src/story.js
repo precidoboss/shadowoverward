@@ -33,7 +33,7 @@ export const TAPES_DATABASE = {
       { text: "DR. HOLLOWAY: 'Sedate him! Maximum dose through the pneumatic injector now!'", duration: 3500 },
       { text: "[HIGH PITCHED METALLIC TEARING & ROAR]", duration: 2800 },
       { text: "ORDERLY: 'The glass is spiderwebbing! It's mimicking our breathing!'", duration: 3500 },
-      { text: "DR. HOLLOWAY: 'The main breaker tripped! We need the backup fuse from the quarantine desk to restart the gate!'", duration: 4500 }
+      { text: "DR. HOLLOWAY: 'The main power tripped! We need the backup fuse from the quarantine desk to restart the generator!'", duration: 4500 }
     ],
     audioPlan: [
       { delay: 1500, pitch: 160, formant: 750, duration: 3.2 },
@@ -52,7 +52,7 @@ export const TAPES_DATABASE = {
       { text: "DR. HOLLOWAY: 'Mayday to anyone monitoring this channel! Subject 407 has breached Ward B.'", duration: 4000 },
       { text: "DR. HOLLOWAY: 'All security personnel are down. The facility is under full biological lockdown.'", duration: 4000 },
       { text: "[WET SLOW FOOTSTEPS ECHOING ON TILES]", duration: 3000 },
-      { text: "DR. HOLLOWAY: 'I locked the morgue access key inside this office safe. Code is the founding year: 1 9 7 4.'", duration: 4800 },
+      { text: "DR. HOLLOWAY: 'I locked the morgue key inside this office safe. The code is the year the vault was sealed: 1 9 7 4.'", duration: 4800 },
       { text: "DR. HOLLOWAY: 'God forgive us for what we unearthed... it is outside my door.'", duration: 4200 }
     ],
     audioPlan: [
@@ -72,7 +72,7 @@ export const TAPES_DATABASE = {
       { text: "DR. HOLLOWAY (WHISPERING): 'My flashlight... dead. I am hiding beneath the autopsy table.'", duration: 4200 },
       { text: "DR. HOLLOWAY: 'It doesn't kill for hunger. It absorbs the faces, the voices.'", duration: 4000 },
       { text: "[HEAVY RHYTHMIC BREATHING RIGHT NEXT TO MIC]", duration: 3200 },
-      { text: "DR. HOLLOWAY: 'The fire exit in the basement is the only way out. Insert the fuse into the breaker... and RUN.'", duration: 4800 },
+      { text: "DR. HOLLOWAY: 'The fire exit in the basement is the only way out. Put the fuse in the generator... and RUN.'", duration: 4800 },
       { text: "DR. HOLLOWAY: 'DON'T LOOK BACK. IT'S STANDING RIGHT OVER ME--'", duration: 3500 },
       { text: "[SUDDEN SIGNAL CORRUPTION & SCREAM]", duration: 2500 }
     ],
@@ -122,13 +122,13 @@ export class StoryManager {
     this.ui = ui;
     this.currentObjectiveIndex = 0;
     this.objectives = [
-      { text: 'Search the Reception Lobby for the Ward A Key', target: { x: 4.2, z: 15.8 }, locationName: 'RECEPTION DESK' },
-      { text: 'Unlock Ward A and recover Tape 01', target: { x: -11.5, z: 6.5 }, locationName: 'WARD A (ROOM 101)' },
-      { text: 'Get Ward B Keycard & Safe Code in Room 102', target: { x: -11.0, z: -6.5 }, locationName: 'WARD A (ROOM 102)' },
-      { text: 'Unlock Wall Safe in Dr. Holloway\'s Office (Tape 03 & Key)', target: { x: 16.5, z: 6.5 }, locationName: 'OFFICE SAFE' },
-      { text: 'Retrieve High-Voltage Fuse from Ward B (Tape 02)', target: { x: 14.5, z: -9.5 }, locationName: 'WARD B QUARANTINE' },
-      { text: 'Unlock Basement & Install Fuse into the Generator', target: { x: -8.0, z: -25.0 }, locationName: 'BASEMENT GENERATOR' },
-      { text: 'Get all 4 tapes, restore power at the breaker, stop Shadow 47, then take the fire exit', target: { x: 0.0, z: -34.8 }, locationName: 'EMERGENCY FIRE EXIT' }
+      { text: 'Find the Ward A key in the reception lobby', target: { x: 4.2, z: 15.8 }, locationName: 'RECEPTION DESK' },
+      { text: 'Open Ward A and take Tape 01 from Room 101', target: { x: -11.5, z: 6.5 }, locationName: 'WARD A (ROOM 101)' },
+      { text: 'Take the Ward B keycard and the safe code from Room 102', target: { x: -11.0, z: -6.5 }, locationName: 'WARD A (ROOM 102)' },
+      { text: "Open the safe in Dr. Holloway's office for the morgue key and Tape 03", target: { x: 16.5, z: 6.5 }, locationName: "DR. HOLLOWAY'S OFFICE" },
+      { text: 'Take the fuse and Tape 02 from the Ward B quarantine desk', target: { x: 14.5, z: -9.5 }, locationName: 'WARD B QUARANTINE' },
+      { text: 'Open the basement door and put the fuse into the generator', target: { x: -8.0, z: -25.0 }, locationName: 'BASEMENT GENERATOR' },
+      { text: 'Take Tape 04 and escape through the basement fire exit', target: { x: 0.0, z: -34.8 }, locationName: 'EMERGENCY FIRE EXIT' }
     ];
 
     this.fullObjectives = this.objectives;
