@@ -794,8 +794,9 @@ export class LostFootageGame {
         }
       }
 
-      if (this.levelKind === 'quick' && this.story.currentObjectiveIndex === 1
-          && this.mutants.every(m => m.dead || !m.group.visible)) {
+      // Quick run: both infected staff down moves on to the safe, whether the rifle was picked up first or not
+      if (this.levelKind === 'quick' && this.story.currentObjectiveIndex <= 1
+          && this.mutants.slice(0, QUICK_MUTANT_SPAWNS.length).every(m => m.dead || !m.group.visible)) {
         this.story.advanceObjective(2);
       }
 
